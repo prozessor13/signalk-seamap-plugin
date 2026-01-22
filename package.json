@@ -1,0 +1,6 @@
+{
+  "id": "signalk-seamap-plugin",
+  "name": "signalk-seamap-plugin",
+  "keywords": ["signalk-node-server-plugin"],
+  "entrypoint": "index.js"
+}

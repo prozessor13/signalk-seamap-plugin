@@ -1,0 +1,26 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "version": "0.0.1",
+    "title": "Signal K Seamap Plugin OpenApi",
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    }
+  },
+  "paths": {
+    "/download": {
+      "get": {
+        "tags": [],
+        "description": "Download a pmtiles file from Maptoolkit PMTiles",
+        "responses": {
+          "200": {
+            "properties": {
+              "message": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ZL6 Tile Selector</title>
+    <script src='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js'></script>
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css' />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            z-index: 1000;
+            width: 280px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #9b59b6;
+        }
+        #info p {
+            margin: 0 0 10px 0;
+            color: #666;
+            line-height: 1.4;
+        }
+        #info .instructions {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .tile-section {
+            font-size: 12px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .tile-section strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .tile-section-list {
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 120px;
+            overflow-y: auto;
+            background: #f8f8f8;
+            border-radius: 4px;
+            padding: 8px;
+        }
+        #offline-info {
+            color: #27ae60;
+        }
+        #download-section {
+            color: #9b59b6;
+        }
+        .date {
+            color: #888;
+            font-size: 10px;
+        }
+        #download-btn {
+            width: 100%;
+            padding: 10px;
+            background: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #download-btn:hover {
+            background: #8e44ad;
+        }
+        #download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #3388ff;
+            background: rgba(51, 136, 255, 0.2);
+            pointer-events: none;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 400px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .modal h3 {
+            margin: 0 0 15px 0;
+            color: #9b59b6;
+            font-size: 18px;
+        }
+        .modal p {
+            margin: 0 0 12px 0;
+            color: #666;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+        .modal code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #9b59b6;
+        }
+        .modal a {
+            color: #9b59b6;
+        }
+        .modal strong {
+            color: #333;
+        }
+        .modal-close {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .modal-close:hover {
+            background: #8e44ad;
+        }
+    </style>
+</head>
+<body>
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <h3>go-pmtiles not installed</h3>
+            <p>To download tiles, you need <strong>go-pmtiles</strong> installed on your system.</p>
+            <p>Install via Go:</p>
+            <p><code>go install github.com/protomaps/go-pmtiles@latest</code></p>
+            <p>Or download from: <a href="https://github.com/protomaps/go-pmtiles/releases" target="_blank">GitHub Releases</a></p>
+            <p>You can configure the path to the go-pmtiles executable in the <strong>SignalK plugin settings</strong>.</p>
+            <button class="modal-close" onclick="document.getElementById('modal-overlay').style.display='none'">OK, got it</button>
+        </div>
+    </div>
+    <div id="map"></div>
+    <div id="info">
+        <h2>SignalK Seamap Plugin</h2>
+        <p>Select map tiles to download offline nautical charts for your boat.</p>
+        <div class="instructions">
+            <strong>Shift+Drag</strong> to select area<br>
+            <strong>Click</strong> to toggle single tile
+        </div>
+        <div id="offline-info" class="tile-section"></div>
+        <div id="download-section" class="tile-section" style="display: none;">
+            <strong id="tile-count"></strong>
+            <div id="tile-list" class="tile-section-list"></div>
+            <button id="download-btn">Download Tiles</button>
+        </div>
+    </div>
+
+    <script>
+        // Generate GeoJSON for all ZL6 tiles
+        function generateZL6TileGrid() {
+            const zoom = 6;
+            const numTiles = Math.pow(2, zoom);
+            const features = [];
+
+            for (let x = 0; x < numTiles; x++) {
+                for (let y = 0; y < numTiles; y++) {
+                    const bounds = tileBounds(x, y, zoom);
+                    features.push({
+                        type: 'Feature',
+                        properties: {
+                            x: x,
+                            y: y,
+                            z: zoom,
+                            id: `${zoom}/${x}/${y}`
+                        },
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [
+                                [
+                                    [bounds.west, bounds.north],
+                                    [bounds.east, bounds.north],
+                                    [bounds.east, bounds.south],
+                                    [bounds.west, bounds.south],
+                                    [bounds.west, bounds.north]
+                                ]
+                            ]
+                        }
+                    });
+                }
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: features
+            };
+        }
+
+        // Convert tile coordinates to lat/lng bounds
+        function tileBounds(x, y, z) {
+            const n = Math.pow(2, z);
+            const west = (x / n) * 360 - 180;
+            const east = ((x + 1) / n) * 360 - 180;
+            const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+            const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+            return { west, east, north, south };
+        }
+
+        // Convert lng/lat to tile coordinates
+        function lngLatToTile(lng, lat, z) {
+            const n = Math.pow(2, z);
+            const x = Math.floor((lng + 180) / 360 * n);
+            const latRad = lat * Math.PI / 180;
+            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+            return { x: Math.max(0, Math.min(n - 1, x)), y: Math.max(0, Math.min(n - 1, y)) };
+        }
+
+        const tileGrid = generateZL6TileGrid();
+        const selectedTiles = new Set();
+
+        // Offline tiles data (tiles already downloaded with individual dates)
+        const offlineTiles = new Map([
+            ['6/34/22', '2025-01-15T14:30:00Z'],
+            ['6/34/23', '2025-01-15T14:30:00Z'],
+            ['6/35/23', '2025-01-18T09:15:00Z'],
+            ['6/35/24', '2025-01-18T09:15:00Z']
+        ]);
+
+        window.map = new maplibregl.Map({
+            hash: true,
+            container: 'map',
+            style: 'https://tiles.versatiles.org/assets/styles/neutrino/style.json',
+            center: [14.71, 52.84],
+            zoom: 3,
+            boxZoom: false,
+            doubleClickZoom: false
+        });
+
+        map.on('load', () => {
+
+            // Add tile grid source
+            map.addSource('tile-grid', {
+                type: 'geojson',
+                data: tileGrid
+            });
+
+            // Add line layer for tile borders - much thicker and visible
+            map.addLayer({
+                id: 'tile-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#9b59b6',
+                    'line-width': 0.5,
+                    'line-opacity': 0.5
+                }
+            });
+
+
+            // Add invisible fill layer for click detection
+            map.addLayer({
+                id: 'tile-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#000000',
+                    'fill-opacity': 0
+                }
+            });
+
+            // Add hover highlight layer
+            map.addLayer({
+                id: 'tile-hover',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#9b59b6',
+                    'fill-opacity': 0.1
+                },
+                filter: ['==', 'id', '']
+            });
+
+            // Add selected tiles fill highlight
+            map.addLayer({
+                id: 'tile-selected-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#9b59b6',
+                    'fill-opacity': 0.15
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add selected tiles line highlight (thicker border)
+            map.addLayer({
+                id: 'tile-selected-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#9b59b6',
+                    'line-width': 2,
+                    'line-opacity': 1
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add offline tiles fill (green)
+            map.addLayer({
+                id: 'tile-offline-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#27ae60',
+                    'fill-opacity': 0.2
+                },
+                filter: ['in', 'id', ...offlineTiles.keys()]
+            });
+
+            // Add offline tiles line (green border)
+            map.addLayer({
+                id: 'tile-offline-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#27ae60',
+                    'line-width': 2,
+                    'line-opacity': 0.8
+                },
+                filter: ['in', 'id', ...offlineTiles.keys()]
+            });
+
+            // Add labels for selected tiles
+            map.addLayer({
+                id: 'tile-selected-labels',
+                type: 'symbol',
+                source: 'tile-grid',
+                layout: {
+                    'text-field': ['get', 'id'],
+                    'text-size': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 6,
+                        3, 10,
+                        6, 14
+                    ],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                },
+                paint: {
+                    'text-color': '#9b59b6',
+                    'text-halo-color': 'white',
+                    'text-halo-width': 1,
+                    'text-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 0,
+                        2.5, 1
+                    ]
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add labels for offline tiles
+            map.addLayer({
+                id: 'tile-offline-labels',
+                type: 'symbol',
+                source: 'tile-grid',
+                layout: {
+                    'text-field': ['get', 'id'],
+                    'text-size': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 6,
+                        3, 10,
+                        6, 14
+                    ],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                },
+                paint: {
+                    'text-color': '#27ae60',
+                    'text-halo-color': 'white',
+                    'text-halo-width': 1,
+                    'text-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 0,
+                        2.5, 1
+                    ]
+                },
+                filter: ['in', 'id', ...offlineTiles.keys()]
+            });
+
+            // Click to toggle single tile
+            map.on('click', 'tile-fill', (e) => {
+                if (e.originalEvent.shiftKey) return;
+                const feature = e.features[0];
+                const id = feature.properties.id;
+
+                if (selectedTiles.has(id)) {
+                    selectedTiles.delete(id);
+                } else {
+                    selectedTiles.add(id);
+                }
+                updateSelection();
+            });
+
+            // Change cursor and highlight on hover
+            map.on('mousemove', 'tile-fill', (e) => {
+                map.getCanvas().style.cursor = 'pointer';
+                if (e.features.length > 0) {
+                    const id = e.features[0].properties.id;
+                    map.setFilter('tile-hover', ['==', 'id', id]);
+                }
+            });
+            map.on('mouseleave', 'tile-fill', () => {
+                map.getCanvas().style.cursor = '';
+                map.setFilter('tile-hover', ['==', 'id', '']);
+            });
+
+            // Box selection with Shift+Drag - must be inside load handler
+            let isSelecting = false;
+            let startPoint = null;
+            let selectionBox = null;
+
+            map.getCanvas().addEventListener('mousedown', (e) => {
+                if (!e.shiftKey) return;
+
+                isSelecting = true;
+                startPoint = { x: e.clientX, y: e.clientY };
+
+                selectionBox = document.createElement('div');
+                selectionBox.className = 'selection-box';
+                document.body.appendChild(selectionBox);
+
+                map.dragPan.disable();
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isSelecting || !selectionBox) return;
+
+                const minX = Math.min(startPoint.x, e.clientX);
+                const minY = Math.min(startPoint.y, e.clientY);
+                const maxX = Math.max(startPoint.x, e.clientX);
+                const maxY = Math.max(startPoint.y, e.clientY);
+
+                selectionBox.style.left = minX + 'px';
+                selectionBox.style.top = minY + 'px';
+                selectionBox.style.width = (maxX - minX) + 'px';
+                selectionBox.style.height = (maxY - minY) + 'px';
+            });
+
+            document.addEventListener('mouseup', (e) => {
+                if (!isSelecting) return;
+
+                const endPoint = { x: e.clientX, y: e.clientY };
+
+                // Convert screen coordinates to lng/lat
+                const sw = map.unproject([
+                    Math.min(startPoint.x, endPoint.x),
+                    Math.max(startPoint.y, endPoint.y)
+                ]);
+                const ne = map.unproject([
+                    Math.max(startPoint.x, endPoint.x),
+                    Math.min(startPoint.y, endPoint.y)
+                ]);
+
+                // Find tiles in selection
+                const zoom = 6;
+                const minTile = lngLatToTile(sw.lng, ne.lat, zoom);
+                const maxTile = lngLatToTile(ne.lng, sw.lat, zoom);
+
+                for (let x = minTile.x; x <= maxTile.x; x++) {
+                    for (let y = minTile.y; y <= maxTile.y; y++) {
+                        const id = `${zoom}/${x}/${y}`;
+                        selectedTiles.add(id);
+                    }
+                }
+
+                updateSelection();
+
+                // Cleanup
+                if (selectionBox) {
+                    selectionBox.remove();
+                    selectionBox = null;
+                }
+                isSelecting = false;
+                startPoint = null;
+                map.dragPan.enable();
+            });
+
+            // Initialize selection display
+            updateSelection();
+        });
+
+        function updateSelection() {
+            const ids = Array.from(selectedTiles).sort();
+
+            // Update filter to show selected tiles with fill, thicker lines and labels
+            map.setFilter('tile-selected-fill', ['in', 'id', ...ids]);
+            map.setFilter('tile-selected-lines', ['in', 'id', ...ids]);
+            // Only show labels for selected tiles that are NOT offline (offline has its own labels)
+            const newTileIds = ids.filter(id => !offlineTiles.has(id));
+            map.setFilter('tile-selected-labels', ['in', 'id', ...newTileIds]);
+
+            // Update offline info
+            const offlineInfo = document.getElementById('offline-info');
+            const offlineCount = offlineTiles.size;
+            const offlineTilesList = Array.from(offlineTiles.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([id, date]) => {
+                const formattedDate = new Date(date).toLocaleDateString('de-DE', {
+                    day: '2-digit', month: '2-digit', year: 'numeric'
+                });
+                return `<div>${id} <span class="date">${formattedDate}</span></div>`;
+            }).join('');
+            offlineInfo.innerHTML = `<strong>${offlineCount} tile${offlineCount !== 1 ? 's' : ''} offline available</strong><div class="tile-section-list">${offlineTilesList}</div>`;
+
+            const downloadSection = document.getElementById('download-section');
+            const tileCount = document.getElementById('tile-count');
+            const tileList = document.getElementById('tile-list');
+
+            if (ids.length === 0) {
+                downloadSection.style.display = 'none';
+            } else {
+                downloadSection.style.display = 'block';
+                tileCount.textContent = `${ids.length} tile${ids.length !== 1 ? 's' : ''} to download`;
+                tileList.innerHTML = ids.map(id => {
+                    const isOffline = offlineTiles.has(id);
+                    if (isOffline) {
+                        const formattedDate = new Date(offlineTiles.get(id)).toLocaleDateString('de-DE', {
+                            day: '2-digit', month: '2-digit', year: 'numeric'
+                        });
+                        return `<div style="color: #27ae60;">${id} <span class="date">${formattedDate}</span></div>`;
+                    }
+                    return `<div style="color: #9b59b6;">${id}</div>`;
+                }).join('');
+            }
+
+            // Log to console for easy copy
+            console.log('Selected tiles:', ids);
+        }
+
+        // Download button handler
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const ids = Array.from(selectedTiles).sort();
+            if (ids.length === 0) return;
+
+            // TODO: Implement actual download
+            console.log('Download requested for tiles:', ids);
+            alert(`Download ${ids.length} tiles:\n${ids.slice(0, 10).join('\n')}${ids.length > 10 ? '\n...' : ''}`);
+        });
+
+    </script>
+</body>
+</html>
