@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Seamap Tile Downloader</title>
+    <script src='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js'></script>
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css' />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            z-index: 1000;
+            width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #9b59b6;
+        }
+        #info p {
+            margin: 0 0 10px 0;
+            color: #666;
+            line-height: 1.4;
+        }
+        #info .instructions {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .tile-section {
+            font-size: 12px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .tile-section strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .tile-section-list {
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 120px;
+            overflow-y: auto;
+            background: #f8f8f8;
+            border-radius: 4px;
+            padding: 8px;
+        }
+        #offline-info {
+            color: #27ae60;
+        }
+        #download-section {
+            color: #9b59b6;
+        }
+        .date {
+            color: #888;
+            font-size: 10px;
+        }
+        .tile-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+        }
+        .tile-item .delete-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 10px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .tile-item .delete-btn:hover {
+            opacity: 1;
+        }
+        #download-btn {
+            width: 100%;
+            padding: 10px;
+            background: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #download-btn:hover {
+            background: #8e44ad;
+        }
+        #download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #3388ff;
+            background: rgba(51, 136, 255, 0.2);
+            pointer-events: none;
+        }
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.hidden {
+            display: none;
+        }
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 450px;
+            width: 90%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .modal h3 {
+            margin: 0 0 15px 0;
+            color: #9b59b6;
+            font-size: 18px;
+        }
+        .modal p {
+            margin: 0 0 12px 0;
+            color: #666;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+        .modal code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #9b59b6;
+        }
+        .modal a {
+            color: #9b59b6;
+        }
+        .modal strong {
+            color: #333;
+        }
+        .modal-close {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .modal-close:hover {
+            background: #8e44ad;
+        }
+        /* Download Modal */
+        #download-modal .progress-container {
+            margin: 15px 0;
+        }
+        #download-modal .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+        #download-modal .progress-bar-outer {
+            background: #e9ecef;
+            border-radius: 4px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        #download-modal .progress-bar-inner {
+            height: 100%;
+            background: linear-gradient(90deg, #9b59b6, #8e44ad);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            min-width: 40px;
+        }
+        #download-modal .current-file {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        #download-modal .current-file .label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 3px;
+        }
+        #download-modal .current-file .value {
+            font-weight: bold;
+            color: #333;
+        }
+        #download-modal .file-progress {
+            margin-top: 8px;
+        }
+        #download-modal .file-progress-bar {
+            background: #e9ecef;
+            border-radius: 3px;
+            height: 16px;
+            overflow: hidden;
+        }
+        #download-modal .file-progress-inner {
+            height: 100%;
+            background: #27ae60;
+            transition: width 0.3s ease;
+        }
+        #download-modal .file-progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+            margin-top: 3px;
+        }
+        #download-modal .stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        #download-modal .stats .stat {
+            display: flex;
+            flex-direction: column;
+        }
+        #download-modal .stats .stat-value {
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+        .cancel-btn {
+            width: 100%;
+            padding: 12px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .cancel-btn:hover {
+            background: #c0392b;
+        }
+        .status-message {
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status-message.info {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .completed-list, .failed-list {
+            font-size: 11px;
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .completed-list {
+            background: #d4edda;
+            color: #155724;
+        }
+        .failed-list {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        #download-modal .download-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f8f8;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column-reverse; /* Show newest at bottom, scroll to bottom */
+        }
+        #download-modal .download-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 3px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        #download-modal .download-item:last-child {
+            border-bottom: none;
+        }
+        #download-modal .download-item .file-name {
+            flex: 1;
+            color: #333;
+        }
+        #download-modal .download-item .file-size {
+            color: #666;
+            margin-left: 10px;
+        }
+        #download-modal .download-item.active {
+            font-weight: bold;
+            color: #9b59b6;
+        }
+        #download-modal .download-item.active .file-name::after {
+            content: " ⟳";
+            display: inline;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { content: " ⟳"; }
+            25% { content: " ◐"; }
+            50% { content: " ◓"; }
+            75% { content: " ◑"; }
+            100% { content: " ⟳"; }
+        }
+    </style>
+</head>
+<body>
+    <!-- PMTiles not installed modal -->
+    <div id="pmtiles-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>go-pmtiles not installed</h3>
+            <p>To download tiles, you need <strong>go-pmtiles</strong> installed on your system.</p>
+            <p>Install via Go:</p>
+            <p><code>go install github.com/protomaps/go-pmtiles@latest</code></p>
+            <p>Or download from: <a href="https://github.com/protomaps/go-pmtiles/releases" target="_blank">GitHub Releases</a></p>
+            <p>You can configure the path to the go-pmtiles executable in the <strong>SignalK plugin settings</strong>.</p>
+            <button class="modal-close" onclick="document.getElementById('pmtiles-modal').classList.add('hidden')">OK, got it</button>
+        </div>
+    </div>
+
+    <!-- Download progress modal -->
+    <div id="download-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Downloading Tiles</h3>
+
+            <div class="progress-container">
+                <div class="progress-header">
+                    <span>Overall Progress</span>
+                    <span id="modal-tile-progress">0 / 0 tiles</span>
+                </div>
+                <div class="progress-bar-outer">
+                    <div class="progress-bar-inner" id="modal-overall-bar" style="width: 0%">0%</div>
+                </div>
+            </div>
+
+            <div class="download-list" id="modal-download-list">
+                <!-- Files will be added here dynamically -->
+            </div>
+
+            <button class="cancel-btn" id="modal-cancel-btn" onclick="cancelDownloads()">Cancel All Downloads</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="info">
+        <h2>SignalK Seamap Plugin</h2>
+        <p>Select map tiles to download offline nautical charts for your boat.</p>
+        <div class="instructions">
+            <strong>Shift+Drag</strong> to select area<br>
+            <strong>Click</strong> to toggle single tile
+        </div>
+        <div id="status-container"></div>
+        <div id="offline-info" class="tile-section"></div>
+        <div id="download-section" class="tile-section" style="display: none;">
+            <strong id="tile-count"></strong>
+            <div id="tile-list" class="tile-section-list"></div>
+            <button id="download-btn">Download Tiles</button>
+        </div>
+    </div>
+
+    <script>
+        // API base URL
+        const pluginId = window.location.pathname.split('/')[1] || 'signalk-seamap-plugin';
+        const API_BASE = `/plugins/${pluginId}`;
+
+        // Polling interval
+        let pollInterval = null;
+
+        // Track all downloaded files for display
+        const downloadedFiles = new Map(); // key: "tile/source", value: {downloaded, total}
+
+        // Generate GeoJSON for all ZL6 tiles
+        function generateZL6TileGrid() {
+            const zoom = 6;
+            const numTiles = Math.pow(2, zoom);
+            const features = [];
+
+            for (let x = 0; x < numTiles; x++) {
+                for (let y = 0; y < numTiles; y++) {
+                    const bounds = tileBounds(x, y, zoom);
+                    features.push({
+                        type: 'Feature',
+                        properties: {
+                            x: x,
+                            y: y,
+                            z: zoom,
+                            id: `${zoom}/${x}/${y}`
+                        },
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [
+                                [
+                                    [bounds.west, bounds.north],
+                                    [bounds.east, bounds.north],
+                                    [bounds.east, bounds.south],
+                                    [bounds.west, bounds.south],
+                                    [bounds.west, bounds.north]
+                                ]
+                            ]
+                        }
+                    });
+                }
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: features
+            };
+        }
+
+        // Convert tile coordinates to lat/lng bounds
+        function tileBounds(x, y, z) {
+            const n = Math.pow(2, z);
+            const west = (x / n) * 360 - 180;
+            const east = ((x + 1) / n) * 360 - 180;
+            const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+            const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+            return { west, east, north, south };
+        }
+
+        // Convert lng/lat to tile coordinates
+        function lngLatToTile(lng, lat, z) {
+            const n = Math.pow(2, z);
+            const x = Math.floor((lng + 180) / 360 * n);
+            const latRad = lat * Math.PI / 180;
+            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+            return { x: Math.max(0, Math.min(n - 1, x)), y: Math.max(0, Math.min(n - 1, y)) };
+        }
+
+        // Convert directory name (6_34_22) to tile id (6/34/22)
+        function dirToTileId(dirName) {
+            return dirName.replace(/_/g, '/');
+        }
+
+        const tileGrid = generateZL6TileGrid();
+        const selectedTiles = new Set();
+        const offlineTiles = new Map();
+
+        // Show status message
+        function showStatus(message, type = 'info') {
+            const container = document.getElementById('status-container');
+            const div = document.createElement('div');
+            div.className = `status-message ${type}`;
+            div.textContent = message;
+            container.appendChild(div);
+            setTimeout(() => div.remove(), 1000);
+        }
+
+        // Update download modal with status
+        function updateDownloadModal(status) {
+            const modal = document.getElementById('download-modal');
+
+            if (!status.active && status.completedTiles.length === 0 && status.failedTiles.length === 0) {
+                modal.classList.add('hidden');
+                stopPolling();
+                downloadedFiles.clear();
+                return;
+            }
+
+            modal.classList.remove('hidden');
+
+            const totalFiles = status.totalFiles || 1;
+            const currentFileIndex = status.currentFileIndex || 0;
+            const overallPercent = Math.round((currentFileIndex / totalFiles) * 100);
+
+            // Overall progress - show files instead of tiles
+            document.getElementById('modal-tile-progress').textContent = `${currentFileIndex} / ${totalFiles} files`;
+            document.getElementById('modal-overall-bar').style.width = `${overallPercent}%`;
+            document.getElementById('modal-overall-bar').textContent = `${overallPercent}%`;
+
+            // Update current file in downloadedFiles map
+            if (status.currentTile && status.currentSource) {
+                const fileKey = `${status.currentTile}/${status.currentSource}`;
+                const progress = status.progress || '- / -';
+                downloadedFiles.set(fileKey, progress);
+            }
+
+            // Update download list
+            updateDownloadList(status);
+
+            // Update cancel button
+            const cancelBtn = document.getElementById('modal-cancel-btn');
+            if (!status.active) {
+                cancelBtn.textContent = 'Close';
+                cancelBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    stopPolling();
+                    downloadedFiles.clear();
+                    fetchOfflineTiles();
+                };
+            } else {
+                cancelBtn.textContent = 'Cancel All Downloads';
+                cancelBtn.onclick = cancelDownloads;
+            }
+        }
+
+        // Update the download list with individual files
+        function updateDownloadList(status) {
+            const listEl = document.getElementById('modal-download-list');
+            console.log(status)
+            // Mark previously active files as completed
+            // downloadedFiles.forEach((fileData, key) => {
+            //     if (fileData.active) {
+            //         const currentKey = status.currentTile && status.currentSource ?
+            //             `${status.currentTile}/${status.currentSource}` : null;
+            //         if (key !== currentKey) {
+            //             fileData.active = false;
+            //         }
+            //     }
+            // });
+
+            // // Build HTML for download list (in order, column-reverse will flip it)
+            // const items = [];
+            // downloadedFiles.forEach((fileData, key) => {
+            //     const isActive = fileData.active;
+            //     const className = isActive ? 'download-item active' : 'download-item';
+            //     const sizeText = `${fileData.downloaded}/${fileData.total} ${fileData.unit || 'MB'}`;
+
+            //     items.push(`
+            //         <div class="${className}">
+            //             <span class="file-name">${key}</span>
+            //             <span class="file-size">${sizeText}</span>
+            //         </div>
+            //     `);
+            // });
+
+            // listEl.innerHTML = items.join('');
+
+            // // Auto-scroll to bottom (newest item)
+            // if (listEl.scrollHeight > listEl.clientHeight) {
+            //     listEl.scrollTop = 0; // Because of column-reverse, 0 is bottom
+            // }
+        }
+
+        // Poll download status
+        async function pollStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/pmtiles/status`);
+                const status = await response.json();
+                updateDownloadModal(status);
+
+                // If download finished, refresh offline tiles
+                if (!status.active && (status.completedTiles.length > 0 || status.failedTiles.length > 0)) {
+                    fetchOfflineTiles();
+                }
+            } catch (err) {
+                console.error('Failed to poll status:', err);
+            }
+        }
+
+        // Start polling
+        function startPolling() {
+            if (pollInterval) return;
+            pollInterval = setInterval(pollStatus, 2000); // Poll every 2 seconds
+            pollStatus(); // Immediate first poll
+        }
+
+        // Stop polling
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        // Cancel downloads
+        async function cancelDownloads() {
+            try {
+                await fetch(`${API_BASE}/pmtiles/cancel`, { method: 'POST' });
+                showStatus('Downloads cancelled', 'info');
+            } catch (err) {
+                console.error('Failed to cancel:', err);
+            }
+        }
+
+        // Fetch offline tiles from API
+        async function fetchOfflineTiles() {
+            try {
+                const response = await fetch(`${API_BASE}/pmtiles`);
+                const data = await response.json();
+
+                if (data.error === 'pmtiles not installed') {
+                    document.getElementById('pmtiles-modal').classList.remove('hidden');
+                    return;
+                }
+
+                offlineTiles.clear();
+                data.tiles.forEach(tile => {
+                    const tileId = dirToTileId(tile.name);
+                    offlineTiles.set(tileId, tile.created);
+                });
+
+                updateOfflineDisplay();
+                updateMapLayers();
+            } catch (err) {
+                console.error('Failed to fetch offline tiles:', err);
+                showStatus('Failed to load offline tiles', 'error');
+            }
+        }
+
+        // Check if download is running on page load
+        async function checkRunningDownload() {
+            try {
+                const response = await fetch(`${API_BASE}/pmtiles/status`);
+                const status = await response.json();
+
+                // Only show modal if download is active
+                if (status.active) {
+                    updateDownloadModal(status);
+                    startPolling();
+                }
+            } catch (err) {
+                console.error('Failed to check download status:', err);
+            }
+        }
+
+        // Start download
+        async function startDownload(tiles) {
+            try {
+                const tileList = tiles.join(',');
+                const response = await fetch(`${API_BASE}/pmtiles?tile=${encodeURIComponent(tileList)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    showStatus(`Error: ${data.message}`, 'error');
+                    return;
+                }
+
+                showStatus(`Started download of ${tiles.length} tile(s)`, 'success');
+                startPolling();
+            } catch (err) {
+                console.error('Failed to start download:', err);
+                showStatus('Failed to start download', 'error');
+            }
+        }
+
+        // Delete a tile
+        async function deleteTile(tileId) {
+            if (!confirm(`Delete offline tile ${tileId}?`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/pmtiles?tile=${encodeURIComponent(tileId)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    showStatus(`Error: ${data.message}`, 'error');
+                    return;
+                }
+
+                // No notification on successful delete
+                offlineTiles.delete(tileId);
+                updateOfflineDisplay();
+                updateMapLayers();
+            } catch (err) {
+                console.error('Failed to delete tile:', err);
+                showStatus(`Failed to delete ${tileId}`, 'error');
+            }
+        }
+
+        // Update offline tiles display
+        function updateOfflineDisplay() {
+            const offlineInfo = document.getElementById('offline-info');
+            const offlineCount = offlineTiles.size;
+
+            if (offlineCount === 0) {
+                offlineInfo.innerHTML = '<strong>No offline tiles</strong>';
+                return;
+            }
+
+            const offlineTilesList = Array.from(offlineTiles.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([id, date]) => {
+                    const formattedDate = new Date(date).toLocaleDateString('de-DE', {
+                        day: '2-digit', month: '2-digit', year: 'numeric'
+                    });
+                    return `<div class="tile-item">
+                        <span>${id} <span class="date">${formattedDate}</span></span>
+                        <button class="delete-btn" onclick="deleteTile('${id}')">X</button>
+                    </div>`;
+                }).join('');
+
+            offlineInfo.innerHTML = `<strong>${offlineCount} tile${offlineCount !== 1 ? 's' : ''} offline available</strong>
+                <div class="tile-section-list">${offlineTilesList}</div>`;
+        }
+
+        // Update map layers for offline tiles
+        function updateMapLayers() {
+            if (!window.map || !window.map.getLayer('tile-offline-fill')) return;
+
+            const ids = Array.from(offlineTiles.keys());
+            map.setFilter('tile-offline-fill', ['in', 'id', ...ids]);
+            map.setFilter('tile-offline-lines', ['in', 'id', ...ids]);
+            map.setFilter('tile-offline-labels', ['in', 'id', ...ids]);
+        }
+
+        window.map = new maplibregl.Map({
+            hash: true,
+            container: 'map',
+            style: 'https://tiles.versatiles.org/assets/styles/neutrino/style.json',
+            center: [14.71, 52.84],
+            zoom: 3,
+            boxZoom: false,
+            doubleClickZoom: false
+        });
+
+        map.on('load', () => {
+            // Fetch offline tiles from API
+            fetchOfflineTiles();
+
+            // Check if a download is already running
+            checkRunningDownload();
+
+            // Add tile grid source
+            map.addSource('tile-grid', {
+                type: 'geojson',
+                data: tileGrid
+            });
+
+            // Add line layer for tile borders
+            map.addLayer({
+                id: 'tile-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#9b59b6',
+                    'line-width': 0.5,
+                    'line-opacity': 0.5
+                }
+            });
+
+            // Add invisible fill layer for click detection
+            map.addLayer({
+                id: 'tile-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#000000',
+                    'fill-opacity': 0
+                }
+            });
+
+            // Add hover highlight layer
+            map.addLayer({
+                id: 'tile-hover',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#9b59b6',
+                    'fill-opacity': 0.1
+                },
+                filter: ['==', 'id', '']
+            });
+
+            // Add selected tiles fill highlight
+            map.addLayer({
+                id: 'tile-selected-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#9b59b6',
+                    'fill-opacity': 0.15
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add selected tiles line highlight
+            map.addLayer({
+                id: 'tile-selected-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#9b59b6',
+                    'line-width': 2,
+                    'line-opacity': 1
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add offline tiles fill (green)
+            map.addLayer({
+                id: 'tile-offline-fill',
+                type: 'fill',
+                source: 'tile-grid',
+                paint: {
+                    'fill-color': '#27ae60',
+                    'fill-opacity': 0.2
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add offline tiles line (green border)
+            map.addLayer({
+                id: 'tile-offline-lines',
+                type: 'line',
+                source: 'tile-grid',
+                paint: {
+                    'line-color': '#27ae60',
+                    'line-width': 2,
+                    'line-opacity': 0.8
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add labels for selected tiles
+            map.addLayer({
+                id: 'tile-selected-labels',
+                type: 'symbol',
+                source: 'tile-grid',
+                layout: {
+                    'text-field': ['get', 'id'],
+                    'text-size': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 6,
+                        3, 10,
+                        6, 14
+                    ],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                },
+                paint: {
+                    'text-color': '#9b59b6',
+                    'text-halo-color': 'white',
+                    'text-halo-width': 1,
+                    'text-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 0,
+                        2.5, 1
+                    ]
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Add labels for offline tiles
+            map.addLayer({
+                id: 'tile-offline-labels',
+                type: 'symbol',
+                source: 'tile-grid',
+                layout: {
+                    'text-field': ['get', 'id'],
+                    'text-size': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 6,
+                        3, 10,
+                        6, 14
+                    ],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                },
+                paint: {
+                    'text-color': '#27ae60',
+                    'text-halo-color': 'white',
+                    'text-halo-width': 1,
+                    'text-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 0,
+                        2.5, 1
+                    ]
+                },
+                filter: ['in', 'id', '']
+            });
+
+            // Click to toggle single tile
+            map.on('click', 'tile-fill', (e) => {
+                if (e.originalEvent.shiftKey) return;
+                const feature = e.features[0];
+                const id = feature.properties.id;
+
+                if (selectedTiles.has(id)) {
+                    selectedTiles.delete(id);
+                } else {
+                    selectedTiles.add(id);
+                }
+                updateSelection();
+            });
+
+            // Change cursor and highlight on hover
+            map.on('mousemove', 'tile-fill', (e) => {
+                map.getCanvas().style.cursor = 'pointer';
+                if (e.features.length > 0) {
+                    const id = e.features[0].properties.id;
+                    map.setFilter('tile-hover', ['==', 'id', id]);
+                }
+            });
+            map.on('mouseleave', 'tile-fill', () => {
+                map.getCanvas().style.cursor = '';
+                map.setFilter('tile-hover', ['==', 'id', '']);
+            });
+
+            // Box selection with Shift+Drag
+            let isSelecting = false;
+            let startPoint = null;
+            let selectionBox = null;
+
+            map.getCanvas().addEventListener('mousedown', (e) => {
+                if (!e.shiftKey) return;
+
+                isSelecting = true;
+                startPoint = { x: e.clientX, y: e.clientY };
+
+                selectionBox = document.createElement('div');
+                selectionBox.className = 'selection-box';
+                document.body.appendChild(selectionBox);
+
+                map.dragPan.disable();
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isSelecting || !selectionBox) return;
+
+                const minX = Math.min(startPoint.x, e.clientX);
+                const minY = Math.min(startPoint.y, e.clientY);
+                const maxX = Math.max(startPoint.x, e.clientX);
+                const maxY = Math.max(startPoint.y, e.clientY);
+
+                selectionBox.style.left = minX + 'px';
+                selectionBox.style.top = minY + 'px';
+                selectionBox.style.width = (maxX - minX) + 'px';
+                selectionBox.style.height = (maxY - minY) + 'px';
+            });
+
+            document.addEventListener('mouseup', (e) => {
+                if (!isSelecting) return;
+
+                const endPoint = { x: e.clientX, y: e.clientY };
+
+                // Convert screen coordinates to lng/lat
+                const sw = map.unproject([
+                    Math.min(startPoint.x, endPoint.x),
+                    Math.max(startPoint.y, endPoint.y)
+                ]);
+                const ne = map.unproject([
+                    Math.max(startPoint.x, endPoint.x),
+                    Math.min(startPoint.y, endPoint.y)
+                ]);
+
+                // Find tiles in selection
+                const zoom = 6;
+                const minTile = lngLatToTile(sw.lng, ne.lat, zoom);
+                const maxTile = lngLatToTile(ne.lng, sw.lat, zoom);
+
+                for (let x = minTile.x; x <= maxTile.x; x++) {
+                    for (let y = minTile.y; y <= maxTile.y; y++) {
+                        const id = `${zoom}/${x}/${y}`;
+                        selectedTiles.add(id);
+                    }
+                }
+
+                updateSelection();
+
+                // Cleanup
+                if (selectionBox) {
+                    selectionBox.remove();
+                    selectionBox = null;
+                }
+                isSelecting = false;
+                startPoint = null;
+                map.dragPan.enable();
+            });
+
+            // Initialize selection display
+            updateSelection();
+        });
+
+        function updateSelection() {
+            const ids = Array.from(selectedTiles).sort();
+
+            // Update filter to show selected tiles
+            map.setFilter('tile-selected-fill', ['in', 'id', ...ids]);
+            map.setFilter('tile-selected-lines', ['in', 'id', ...ids]);
+
+            // Only show labels for selected tiles that are NOT offline
+            const newTileIds = ids.filter(id => !offlineTiles.has(id));
+            map.setFilter('tile-selected-labels', ['in', 'id', ...newTileIds]);
+
+            const downloadSection = document.getElementById('download-section');
+            const tileCount = document.getElementById('tile-count');
+            const tileList = document.getElementById('tile-list');
+
+            if (ids.length === 0) {
+                downloadSection.style.display = 'none';
+            } else {
+                downloadSection.style.display = 'block';
+                tileCount.textContent = `${ids.length} tile${ids.length !== 1 ? 's' : ''} selected`;
+                tileList.innerHTML = ids.map(id => {
+                    const isOffline = offlineTiles.has(id);
+                    if (isOffline) {
+                        const formattedDate = new Date(offlineTiles.get(id)).toLocaleDateString('de-DE', {
+                            day: '2-digit', month: '2-digit', year: 'numeric'
+                        });
+                        return `<div style="color: #27ae60;">${id} <span class="date">${formattedDate}</span></div>`;
+                    }
+                    return `<div style="color: #9b59b6;">${id}</div>`;
+                }).join('');
+            }
+        }
+
+        // Download button handler
+        document.getElementById('download-btn').addEventListener('click', async () => {
+            const ids = Array.from(selectedTiles).sort();
+            if (ids.length === 0) return;
+
+            // Filter out already offline tiles
+            const toDownload = ids.filter(id => !offlineTiles.has(id));
+
+            if (toDownload.length === 0) {
+                showStatus('All selected tiles are already downloaded', 'info');
+                return;
+            }
+
+            // Clear selection
+            selectedTiles.clear();
+            updateSelection();
+
+            // Start download
+            await startDownload(toDownload);
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,19 @@
 {
-  "id": "signalk-seamap-plugin",
   "name": "signalk-seamap-plugin",
-  "keywords": ["signalk-node-server-plugin"],
-  "entrypoint": "index.js"
+  "version": "1.0.0",
+  "description": "Global Seacharts based on OSM/Gebco/Emod for SignalK",
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-webapp"
+  ],
+  "signalk-plugin-enabled-by-default": false,
+  "signalk": {
+    "displayName": "Seamap Charts"
+  },
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maptoolkit/signalk-seamap-plugin"
+  },
+  "license": "MIT"
 }
