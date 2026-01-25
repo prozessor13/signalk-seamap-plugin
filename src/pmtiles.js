@@ -6,17 +6,64 @@ const { exec, spawn } = require('child_process');
 class Pmtiles {
   constructor(seamap) {
     this.seamap = seamap;
-    // Global download state for polling
     this.state = this.emtpyState();
   }
 
   static SOURCES() {
     return [
-      { name: 'mapterhorn', url: 'https://download.mapterhorn.com/planet.pmtiles', output: 'mapterhorn.pmtiles', maxzoom: 10 },
-      { name: 'osm', url: 'https://fsn1.your-objectstorage.com/mtk-seamap/osm.pmtiles', output: 'osm.pmtiles' },
-      { name: 'seamap', url: 'https://fsn1.your-objectstorage.com/mtk-seamap/seamap.pmtiles', output: 'seamap.pmtiles' },
-      { name: 'gebco', url: 'https://fsn1.your-objectstorage.com/mtk-seamap/gebco.pmtiles', output: 'gebco.pmtiles' },
-      { name: 'emod', url: 'https://fsn1.your-objectstorage.com/mtk-seamap/emod.pmtiles', output: 'emod.pmtiles' }
+      {
+        name: 'seamap',
+        url: 'https://fsn1.your-objectstorage.com/mtk-seamap/seamap.pmtiles',
+        output: 'seamap.pmtiles',
+        minzoom: 0,
+        maxzoom: 14,
+        format: 'pbf',
+        contentType: 'application/x-protobuf',
+        attribution: '© OpenSeaMap contributors'
+      },
+      {
+        name: 'osm',
+        url: 'https://fsn1.your-objectstorage.com/mtk-seamap/osm.pmtiles',
+        output: 'osm.pmtiles',
+        minzoom: 0,
+        maxzoom: 14,
+        format: 'pbf',
+        contentType: 'application/x-protobuf',
+        attribution: '© OpenStreetMap contributors'
+      },
+      {
+        name: 'mapterhorn',
+        url: 'https://download.mapterhorn.com/planet.pmtiles',
+        output: 'mapterhorn.pmtiles',
+        minzoom: 0,
+        maxzoom: 10,
+        format: 'webp',
+        contentType: 'image/webp',
+        encoding: 'terrarium',
+        attribution: '<a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>'
+      },
+      {
+        name: 'gebco',
+        url: 'https://fsn1.your-objectstorage.com/mtk-seamap/gebco.pmtiles',
+        output: 'gebco.pmtiles',
+        minzoom: 0,
+        maxzoom: 9,
+        format: 'webp',
+        contentType: 'image/webp',
+        encoding: 'terrarium',
+        attribution: '<a href="https://www.gebco.net" target="_blank">© GEBCO</a>'
+      },
+      {
+        name: 'emod',
+        url: 'https://fsn1.your-objectstorage.com/mtk-seamap/emod.pmtiles',
+        output: 'emod.pmtiles',
+        minzoom: 0,
+        maxzoom: 11,
+        format: 'webp',
+        contentType: 'image/webp',
+        encoding: 'terrarium',
+        attribution: '<a href="https://emodnet.ec.europa.eu" target="_blank">© EMODnet</a>'
+      }
     ];
   }
 
@@ -27,7 +74,8 @@ class Pmtiles {
       done: [],
       failed: [],
       progress: null,
-      process: null // Reference to kill on cancel
+      process: null,
+      current: 0
     };
   }
 
@@ -52,7 +100,8 @@ class Pmtiles {
         });
       }
 
-      const tilesPath = this.seamap.options?.path || path.join(process.cwd(), 'pmtiles');
+      const tilesPath = this.seamap.options.pmtilesPath;
+      if (!tilesPath) res.status(500).send("No pmtilesPath configured");
 
       fs.access(tilesPath, fs.constants.R_OK, (err) => {
         if (err) {
@@ -120,9 +169,9 @@ class Pmtiles {
     const state = this.state;
     res.json({
       active: state.active,
-      total: (state.queue + state.done + state.failed) * Pmtiles.SOURCES().length,
-      done: (state.done + state.failed) * Pmtiles.SOURCES().length,
-      progress: state.progress
+      total: (state.queue.length + state.done.length + state.failed.length) * Pmtiles.SOURCES().length,
+      done: Math.max(0, (state.done.length + state.failed.length) * Pmtiles.SOURCES().length + state.current - 1),
+      progress: state.progress,
     });
   }
 
@@ -180,7 +229,7 @@ class Pmtiles {
       }
 
       for (const tile of tiles) {
-        if (!this.state.queue.includes(tile) && tile !== this.state.currentTile) {
+        if (!this.state.queue.includes(tile)) {
           this.state.queue.push(tile);
         }
       }
@@ -208,14 +257,15 @@ class Pmtiles {
       return;
     }
 
-    const tile = query[0];
-    const tilesPath = this.seamap.options?.path || path.join(process.cwd(), 'pmtiles');
+    const tile = state.queue[0];
+    const tilesPath = this.seamap.options.pmtilesPath;
     const [z, x, y] = tile.split('/');
     const tileDirName = `${z}_${x}_${y}`;
     const tmpDir = path.join(tilesPath, "." + tileDirName);
     const finalDir = path.join(tilesPath, tileDirName);
     const bbox = this.tileToBbox(parseInt(x), parseInt(y), parseInt(z));
     const sources = Pmtiles.SOURCES();
+    state.current = 0;
 
     fs.mkdir(tmpDir, { recursive: true }, (err) => {
       if (err) {
@@ -231,9 +281,10 @@ class Pmtiles {
           fs.rm(tmpDir, { recursive: true, force: true }, () => {});
           return;
         }
-        if (!source.length) {
+        if (sources.length === 0) {
           if (failed) {
             fs.rm(tmpDir, { recursive: true, force: true }, () => {});
+            state.failed.push(state.queue.shift());
           } else {
             fs.rm(finalDir, { recursive: true, force: true }, () => {
               fs.rename(tmpDir, finalDir, err => {
@@ -243,8 +294,10 @@ class Pmtiles {
               });
             });
           }
+          return;
         }
 
+        state.current++;
         const source = sources.shift();
         const outputPath = path.join(tmpDir, source.output);
         const args = [
@@ -259,7 +312,7 @@ class Pmtiles {
         state.process = proc;
 
         proc.stderr.on('data', (data) => {
-          state.progress = [tile, source, this.parseProgress(data.toString())]
+          state.progress = [tile, source.name, this.parseProgress(data.toString())]
         });
 
         proc.on('close', (code) => {
@@ -290,7 +343,7 @@ class Pmtiles {
       });
     }
 
-    const tilesPath = this.seamap.options?.path || path.join(process.cwd(), 'pmtiles');
+    const tilesPath = this.seamap.options.pmtilesPath;
     const [z, x, y] = tile.split('/');
     const tileDir = path.join(tilesPath, `${z}_${x}_${y}`);
 

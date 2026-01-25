@@ -1,0 +1,344 @@
+/*
+Adapted from d3-contour https://github.com/d3/d3-contour
+
+Copyright 2012-2023 Mike Bostock
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
+*/
+
+class Fragment {
+  constructor(start, end) {
+    this.start = start;
+    this.end = end;
+    this.points = [];
+    this.append = this.append.bind(this);
+    this.prepend = this.prepend.bind(this);
+  }
+
+  append(x, y) {
+    this.points.push(Math.round(x), Math.round(y));
+  }
+
+  prepend(x, y) {
+    this.points.splice(0, 0, Math.round(x), Math.round(y));
+  }
+
+  lineString() {
+    return this.toArray();
+  }
+
+  isEmpty() {
+    return this.points.length < 2;
+  }
+
+  appendFragment(other) {
+    this.points.push(...other.points);
+    this.end = other.end;
+  }
+
+  toArray() {
+    return this.points;
+  }
+}
+
+const CASES = [
+  [],
+  [
+    [
+      [1, 2],
+      [0, 1],
+    ],
+  ],
+  [
+    [
+      [2, 1],
+      [1, 2],
+    ],
+  ],
+  [
+    [
+      [2, 1],
+      [0, 1],
+    ],
+  ],
+  [
+    [
+      [1, 0],
+      [2, 1],
+    ],
+  ],
+  [
+    [
+      [1, 2],
+      [0, 1],
+    ],
+    [
+      [1, 0],
+      [2, 1],
+    ],
+  ],
+  [
+    [
+      [1, 0],
+      [1, 2],
+    ],
+  ],
+  [
+    [
+      [1, 0],
+      [0, 1],
+    ],
+  ],
+  [
+    [
+      [0, 1],
+      [1, 0],
+    ],
+  ],
+  [
+    [
+      [1, 2],
+      [1, 0],
+    ],
+  ],
+  [
+    [
+      [0, 1],
+      [1, 0],
+    ],
+    [
+      [2, 1],
+      [1, 2],
+    ],
+  ],
+  [
+    [
+      [2, 1],
+      [1, 0],
+    ],
+  ],
+  [
+    [
+      [0, 1],
+      [2, 1],
+    ],
+  ],
+  [
+    [
+      [1, 2],
+      [2, 1],
+    ],
+  ],
+  [
+    [
+      [0, 1],
+      [1, 2],
+    ],
+  ],
+  [],
+];
+
+function index(width, x, y, point) {
+  x = x * 2 + point[0];
+  y = y * 2 + point[1];
+  return x + y * (width + 1) * 2;
+}
+
+function ratio(a, b, c) {
+  return (b - a) / (c - a);
+}
+
+/**
+ * Generates contour lines from a HeightTile using the custom d3-contour algorithm.
+ *
+ * This implementation is used for THRESHOLD-based (interval) contour generation.
+ * For fixed LEVEL-based contours, use isolines-ms.ts instead (marching-squares library).
+ *
+ * @param intervalOrLevels Vertical distance between contours (number) or array of specific levels
+ * @param tile The input height tile, where values represent the height at the top-left of each pixel
+ * @param extent Vector tile extent (default 4096)
+ * @param buffer How many pixels into each neighboring tile to include in a tile
+ * @returns an object where keys are the elevation, and values are a list of `[x1, y1, x2, y2, ...]`
+ * contour lines in tile coordinates
+ */
+function generateIsolines(
+  intervalOrLevels,
+  tile,
+  extent = 4096,
+  buffer = 1,
+) {
+  if (
+    !intervalOrLevels ||
+    (Array.isArray(intervalOrLevels) && intervalOrLevels.length === 0)
+  ) {
+    return {};
+  }
+
+  // Check if using interval or specific levels
+  const isInterval = typeof intervalOrLevels === "number";
+  const levels = isInterval
+    ? null
+    : [...intervalOrLevels].sort((a, b) => a - b);
+
+  const multiplier = extent / (tile.width - 1);
+  let tld, trd, bld, brd;
+  let r, c;
+  const segments = {};
+  const fragmentByStartByLevel = new Map();
+  const fragmentByEndByLevel = new Map();
+
+  function interpolate(
+    point,
+    threshold,
+    accept,
+  ) {
+    if (point[0] === 0) {
+      // left
+      accept(
+        multiplier * (c - 1),
+        multiplier * (r - ratio(bld, threshold, tld)),
+      );
+    } else if (point[0] === 2) {
+      // right
+      accept(multiplier * c, multiplier * (r - ratio(brd, threshold, trd)));
+    } else if (point[1] === 0) {
+      // top
+      accept(
+        multiplier * (c - ratio(trd, threshold, tld)),
+        multiplier * (r - 1),
+      );
+    } else {
+      // bottom
+      accept(multiplier * (c - ratio(brd, threshold, bld)), multiplier * r);
+    }
+  }
+
+  // Most marching-squares implementations (d3-contour, gdal-contour) make one pass through the matrix per threshold.
+  // This implementation makes a single pass through the matrix, building up all of the contour lines at the
+  // same time to improve performance.
+  for (r = 1 - buffer; r < tile.height + buffer; r++) {
+    trd = tile.get(0, r - 1);
+    brd = tile.get(0, r);
+    let minR = Math.min(trd, brd);
+    let maxR = Math.max(trd, brd);
+    for (c = 1 - buffer; c < tile.width + buffer; c++) {
+      tld = trd;
+      bld = brd;
+      trd = tile.get(c, r - 1);
+      brd = tile.get(c, r);
+      const minL = minR;
+      const maxL = maxR;
+      minR = Math.min(trd, brd);
+      maxR = Math.max(trd, brd);
+      if (isNaN(tld) || isNaN(trd) || isNaN(brd) || isNaN(bld)) {
+        continue;
+      }
+      const min = Math.min(minL, minR);
+      const max = Math.max(maxL, maxR);
+
+      // Determine which thresholds to process for this cell
+      let thresholds;
+      if (isInterval) {
+        const interval = intervalOrLevels;
+        const start = Math.ceil(min / interval) * interval;
+        const end = Math.floor(max / interval) * interval;
+        thresholds = [];
+        for (let threshold = start; threshold <= end; threshold += interval) {
+          thresholds.push(threshold);
+        }
+      } else {
+        // Filter levels that fall within this cell's range
+        thresholds = levels.filter((level) => level >= min && level <= max);
+      }
+
+      for (const threshold of thresholds) {
+        const tl = tld > threshold;
+        const tr = trd > threshold;
+        const bl = bld > threshold;
+        const br = brd > threshold;
+        for (const segment of CASES[
+          (tl ? 8 : 0) | (tr ? 4 : 0) | (br ? 2 : 0) | (bl ? 1 : 0)
+        ]) {
+          let fragmentByStart = fragmentByStartByLevel.get(threshold);
+          if (!fragmentByStart)
+            fragmentByStartByLevel.set(
+              threshold,
+              (fragmentByStart = new Map()),
+            );
+          let fragmentByEnd = fragmentByEndByLevel.get(threshold);
+          if (!fragmentByEnd)
+            fragmentByEndByLevel.set(threshold, (fragmentByEnd = new Map()));
+          const start = segment[0];
+          const end = segment[1];
+          const startIndex = index(tile.width, c, r, start);
+          const endIndex = index(tile.width, c, r, end);
+          let f, g;
+
+          if ((f = fragmentByEnd.get(startIndex))) {
+            fragmentByEnd.delete(startIndex);
+            if ((g = fragmentByStart.get(endIndex))) {
+              fragmentByStart.delete(endIndex);
+              if (f === g) {
+                // closing a ring
+                interpolate(end, threshold, f.append);
+                if (!f.isEmpty()) {
+                  let list = segments[threshold];
+                  if (!list) {
+                    segments[threshold] = list = [];
+                  }
+                  list.push(f.lineString());
+                }
+              } else {
+                // connecting 2 segments
+                f.appendFragment(g);
+                fragmentByEnd.set((f.end = g.end), f);
+              }
+            } else {
+              // adding to the end of f
+              interpolate(end, threshold, f.append);
+              fragmentByEnd.set((f.end = endIndex), f);
+            }
+          } else if ((f = fragmentByStart.get(endIndex))) {
+            fragmentByStart.delete(endIndex);
+            // extending the start of f
+            interpolate(start, threshold, f.prepend);
+            fragmentByStart.set((f.start = startIndex), f);
+          } else {
+            // starting a new fragment
+            const newFrag = new Fragment(startIndex, endIndex);
+            interpolate(start, threshold, newFrag.append);
+            interpolate(end, threshold, newFrag.append);
+            fragmentByStart.set(startIndex, newFrag);
+            fragmentByEnd.set(endIndex, newFrag);
+          }
+        }
+      }
+    }
+  }
+
+  for (const [level, fragmentByStart] of fragmentByStartByLevel.entries()) {
+    let list = null;
+    for (const value of fragmentByStart.values()) {
+      if (!value.isEmpty()) {
+        if (list == null) {
+          list = segments[level] || (segments[level] = []);
+        }
+        list.push(value.lineString());
+      }
+    }
+  }
+
+  return segments;
+}
+
+module.exports = { default: generateIsolines };

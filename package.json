@@ -15,5 +15,10 @@
     "type": "git",
     "url": "https://github.com/maptoolkit/signalk-seamap-plugin"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "pbf": "^4.0.1",
+    "pmtiles": "^3.0.0",
+    "sharp": "^0.34.5"
+  }
 }

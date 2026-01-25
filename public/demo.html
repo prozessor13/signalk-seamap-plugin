@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Seamap Plugin - MapLibre GL Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js'></script>
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css' />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        .home-link {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            text-decoration: none;
+            color: #9b59b6;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        .home-link:hover {
+            background: #f8f8f8;
+        }
+
+        /* HUD Styles */
+        .ui {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .panel {
+            pointer-events: auto;
+            background: #f7f7f7;
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            box-sizing: border-box;
+            height: 120px;
+            width: 510px;
+        }
+
+        .hud-wrapper {
+            position: absolute;
+            left: 50%;
+            bottom: 10px;
+            transform: translateX(-50%);
+        }
+
+        .card {
+            background: #fefefe;
+            border-radius: 10px;
+            padding: 14px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+            text-align: center;
+            width: 88px;
+            flex: 0 0 auto;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #e86a28;
+            font-weight: 300;
+            letter-spacing: .04em;
+            font-family: sans-serif;
+            opacity: .7;
+        }
+
+        .value {
+            font-size: 30px;
+            color: hsl(20,61%,14%);
+            font-weight: 100;
+            font-family: sans-serif;
+            line-height: 1;
+        }
+
+        .value-pos {
+            font-size: 10px;
+            color: hsl(20,61%,14%);
+            font-weight: 100;
+            font-family: sans-serif;
+            line-height: 1.1;
+        }
+
+        .sub {
+            font-size: 12px;
+            color: #e86a28;
+            font-weight: 300;
+            font-family: sans-serif;
+            opacity: .7;
+        }
+
+        @media (min-width: 1101px) {
+            .hud-wrapper {
+                left: 10px;
+                top: auto;
+                bottom: 10px;
+                transform: none;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .hud-wrapper .panel {
+                transform: scale(0.8);
+                transform-origin: bottom center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="./" class="home-link">← Back to Downloader</a>
+    <div id="map"></div>
+
+    <!-- HUD Overlay -->
+    <div class="ui">
+        <div class="hud-wrapper">
+            <section class="panel hud" aria-label="HUD">
+                <div class="card">
+                    <div class="label">Heading</div>
+                    <div class="value" id="hud-heading">–</div>
+                    <div class="sub">True</div>
+                </div>
+                <div class="card">
+                    <div class="label">Position</div>
+                    <div class="value-pos" id="hud-position">–</div>
+                </div>
+                <div class="card">
+                    <div class="label">SOG</div>
+                    <div class="value" id="hud-sog">–</div>
+                    <div class="sub">Knots</div>
+                </div>
+                <div class="card">
+                    <div class="label">Depth</div>
+                    <div class="value" id="hud-depth">–</div>
+                    <div class="sub">Meters</div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // Get plugin base URL
+        const path = window.location.pathname;
+        const pluginBase = '/plugins' + path.substring(0, path.lastIndexOf('/'));
+        const styleUrl = `${pluginBase}/styles/seamap.json`;
+
+        // SignalK configuration
+        const SIGNALK = {
+            url: 'http://localhost:3000',
+            ws: null,
+        };
+
+        // Helper functions
+        const rad2deg = r => (r * 180 / Math.PI + 360) % 360;
+        const ms2kn = m => m * 1.9438444924574;
+        const fmtNum = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '–');
+        const fmtLat = lat => {
+            const h = lat >= 0 ? 'N' : 'S', a = Math.abs(lat), d = Math.floor(a);
+            let m = (a - d) * 60;
+            m = Math.round(m * 1e3) / 1e3;
+            if (m >= 60) { m = 0; }
+            return `${h} ${d}°${m.toFixed(3)}′`;
+        };
+        const fmtLng = lng => {
+            const h = lng >= 0 ? 'E' : 'W', a = Math.abs(lng), d = Math.floor(a);
+            let m = (a - d) * 60;
+            m = Math.round(m * 1e3) / 1e3;
+            if (m >= 60) { m = 0; }
+            return `${h} ${d}°${m.toFixed(3)}′`;
+        };
+
+        // Initialize map with plugin stylesheet
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: styleUrl,
+            center: [14.71, 52.84],
+            zoom: 8,
+            hash: true
+        });
+
+        // Add controls
+        map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+        map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+
+        // Boat icon SVG
+        const boatSvg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <polygon points="50,5 90,95 50,80 10,95" fill="#1f6feb" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+        </svg>`;
+        const boatImg = new Image(64, 64);
+        boatImg.onload = () => map.addImage('boat', boatImg, { pixelRatio: 2 });
+        boatImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(boatSvg);
+
+        // SignalK data
+        const last = { lat: null, lng: null, hdg: null, sog: null, depth: null };
+
+        // Error handling
+        map.on('error', (e) => {
+            console.error('Map error:', e);
+        });
+
+        map.on('load', () => {
+            console.log('Map loaded successfully');
+
+            // Add vessel source and layer
+            map.addSource('vessel', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+
+            map.addLayer({
+                id: 'vessel-layer',
+                type: 'symbol',
+                source: 'vessel',
+                layout: {
+                    'icon-image': 'boat',
+                    'icon-size': 0.6,
+                    'icon-allow-overlap': true,
+                    'icon-rotate': ['get', 'heading'],
+                    'icon-rotation-alignment': 'map',
+                }
+            });
+
+            // Add heading line source and layer
+            map.addSource('heading-line', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+
+            map.addLayer({
+                id: 'heading-line-layer',
+                type: 'line',
+                source: 'heading-line',
+                paint: {
+                    'line-width': 3,
+                    'line-color': '#1f6feb',
+                    'line-opacity': 0.8
+                }
+            });
+
+            // Connect to SignalK
+            connectWS();
+        });
+
+        // WebSocket connection
+        function connectWS() {
+            try {
+                SIGNALK.ws = new WebSocket(SIGNALK.url.replace(/^http/, 'ws') + '/signalk/v1/stream?subscribe=self');
+                SIGNALK.ws.onmessage = (ev) => handleDelta(JSON.parse(ev.data));
+                SIGNALK.ws.onerror = () => SIGNALK.ws.close();
+                SIGNALK.ws.onclose = () => setTimeout(() => connectWS(), 5000);
+            } catch (e) {
+                setTimeout(() => connectWS(), 1000);
+            }
+        }
+
+        // Handle SignalK delta
+        function handleDelta(delta) {
+            if (!delta || !delta.updates) return;
+            for (const up of delta.updates) {
+                const ts = up.timestamp;
+                for (const v of (up.values || [])) {
+                    const p = v.path || '';
+                    const val = v.value;
+                    if (p === 'navigation.position') {
+                        applyUpdate(val?.latitude, val?.longitude, last.hdg, last.sog, last.depth, ts);
+                    } else if (p === 'navigation.headingTrue' || p === 'navigation.courseOverGroundTrue') {
+                        applyUpdate(last.lat, last.lng, val, last.sog, last.depth, ts);
+                    } else if (p === 'navigation.speedOverGround') {
+                        applyUpdate(last.lat, last.lng, last.hdg, val, last.depth, ts);
+                    } else if (p.startsWith('environment.depth.')) {
+                        applyUpdate(last.lat, last.lng, last.hdg, last.sog, val, ts);
+                    }
+                }
+            }
+        }
+
+        // Apply updates
+        function applyUpdate(lat, lng, hdg, sog, depth, ts) {
+            if (Number.isFinite(lat)) last.lat = lat;
+            if (Number.isFinite(lng)) last.lng = lng;
+            if (Number.isFinite(hdg)) last.hdg = hdg;
+            if (Number.isFinite(sog)) last.sog = sog;
+            if (Number.isFinite(depth)) last.depth = depth;
+            updateHud();
+            updateMap();
+        }
+
+        // Update HUD display
+        function updateHud() {
+            document.getElementById('hud-heading').textContent = Number.isFinite(last.hdg) ? `${fmtNum(rad2deg(last.hdg), 0)}°` : '–';
+            document.getElementById('hud-position').innerHTML = (last.lat != null && last.lng != null) ? `${fmtLat(last.lat)}<br>${fmtLng(last.lng)}` : '–';
+            document.getElementById('hud-sog').textContent = Number.isFinite(last.sog) ? fmtNum(ms2kn(last.sog), 1) : '–';
+            document.getElementById('hud-depth').textContent = Number.isFinite(last.depth) ? fmtNum(last.depth, 1) : '–';
+        }
+
+        // Update map with vessel position and heading line
+        function updateMap() {
+            if (!last.lat || !last.lng || !map.getSource('vessel')) return;
+
+            const headingDeg = Number.isFinite(last.hdg) ? rad2deg(last.hdg) : 0;
+
+            // Update vessel position
+            map.getSource('vessel').setData({
+                type: 'FeatureCollection',
+                features: [{
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [last.lng, last.lat] },
+                    properties: { heading: headingDeg }
+                }]
+            });
+
+            // Update heading line (only if moving)
+            if (Number.isFinite(last.sog) && last.sog > 0.1 && Number.isFinite(last.hdg)) {
+                const lineLength = 0.01; // Length in degrees
+                const headingRad = last.hdg;
+                const endLat = last.lat + (lineLength * Math.cos(headingRad));
+                const endLng = last.lng + (lineLength * Math.sin(headingRad) / Math.cos(last.lat * Math.PI / 180));
+
+                map.getSource('heading-line').setData({
+                    type: 'FeatureCollection',
+                    features: [{
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: [[last.lng, last.lat], [endLng, endLat]]
+                        }
+                    }]
+                });
+            } else {
+                // Clear heading line if not moving
+                map.getSource('heading-line').setData({
+                    type: 'FeatureCollection',
+                    features: []
+                });
+            }
+
+            // Center map on vessel on first position update
+            if (!map.userInteracted) {
+                map.setCenter([last.lng, last.lat]);
+                map.setZoom(12);
+            }
+        }
+
+        // Track user interaction to prevent auto-centering
+        map.on('movestart', (e) => {
+            if (e.originalEvent) {
+                map.userInteracted = true;
+            }
+        });
+    </script>
+</body>
+</html>

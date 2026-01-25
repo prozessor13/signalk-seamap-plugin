@@ -339,20 +339,51 @@
             color: #9b59b6;
         }
         #download-modal .download-item.active .file-name::after {
-            content: " ⟳";
-            display: inline;
-            animation: spin 1s linear infinite;
+            content: "";
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-left: 8px;
+            border: 2px solid #9b59b6;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spinner-rotate 0.8s linear infinite;
+            vertical-align: middle;
         }
-        @keyframes spin {
-            0% { content: " ⟳"; }
-            25% { content: " ◐"; }
-            50% { content: " ◓"; }
-            75% { content: " ◑"; }
-            100% { content: " ⟳"; }
+        @keyframes spinner-rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #download-modal .info-text {
+            background: #e8f4f8;
+            border-left: 3px solid #3498db;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #2c3e50;
+            line-height: 1.4;
+        }
+        .demo-link {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #9b59b6;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1001;
+        }
+        .demo-link:hover {
+            background: #8e44ad;
         }
     </style>
 </head>
 <body>
+    <a href="./demo.html" class="demo-link">🗺️ MapLibre GL Demo</a>
     <!-- PMTiles not installed modal -->
     <div id="pmtiles-modal" class="modal-overlay hidden">
         <div class="modal">
@@ -370,6 +401,10 @@
     <div id="download-modal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Downloading Tiles</h3>
+
+            <div class="info-text">
+                <strong>Info:</strong> Downloads are handled by the SignalK server in the background. You can close this window - the download will continue.
+            </div>
 
             <div class="progress-container">
                 <div class="progress-header">
@@ -408,14 +443,13 @@
 
     <script>
         // API base URL
-        const pluginId = window.location.pathname.split('/')[1] || 'signalk-seamap-plugin';
-        const API_BASE = `/plugins/${pluginId}`;
+        const API_BASE = `/plugins/signalk-seamap-plugin`;
 
         // Polling interval
         let pollInterval = null;
 
-        // Track all downloaded files for display
-        const downloadedFiles = new Map(); // key: "tile/source", value: {downloaded, total}
+        // Track current download file
+        let currentDownloadFile = null;
 
         // Generate GeoJSON for all ZL6 tiles
         function generateZL6TileGrid() {
@@ -498,30 +532,23 @@
         function updateDownloadModal(status) {
             const modal = document.getElementById('download-modal');
 
-            if (!status.active && status.completedTiles.length === 0 && status.failedTiles.length === 0) {
+            if (!status.active && status.done === 0) {
                 modal.classList.add('hidden');
                 stopPolling();
-                downloadedFiles.clear();
+                currentDownloadFile = null;
                 return;
             }
 
             modal.classList.remove('hidden');
 
-            const totalFiles = status.totalFiles || 1;
-            const currentFileIndex = status.currentFileIndex || 0;
-            const overallPercent = Math.round((currentFileIndex / totalFiles) * 100);
+            const totalFiles = status.total || 1;
+            const doneFiles = status.done || 0;
+            const overallPercent = Math.round((doneFiles / totalFiles) * 100);
 
-            // Overall progress - show files instead of tiles
-            document.getElementById('modal-tile-progress').textContent = `${currentFileIndex} / ${totalFiles} files`;
+            // Overall progress - show files
+            document.getElementById('modal-tile-progress').textContent = `${doneFiles} / ${totalFiles} files`;
             document.getElementById('modal-overall-bar').style.width = `${overallPercent}%`;
             document.getElementById('modal-overall-bar').textContent = `${overallPercent}%`;
-
-            // Update current file in downloadedFiles map
-            if (status.currentTile && status.currentSource) {
-                const fileKey = `${status.currentTile}/${status.currentSource}`;
-                const progress = status.progress || '- / -';
-                downloadedFiles.set(fileKey, progress);
-            }
 
             // Update download list
             updateDownloadList(status);
@@ -531,10 +558,7 @@
             if (!status.active) {
                 cancelBtn.textContent = 'Close';
                 cancelBtn.onclick = () => {
-                    modal.classList.add('hidden');
-                    stopPolling();
-                    downloadedFiles.clear();
-                    fetchOfflineTiles();
+                    window.location.reload();
                 };
             } else {
                 cancelBtn.textContent = 'Cancel All Downloads';
@@ -545,39 +569,35 @@
         // Update the download list with individual files
         function updateDownloadList(status) {
             const listEl = document.getElementById('modal-download-list');
-            console.log(status)
-            // Mark previously active files as completed
-            // downloadedFiles.forEach((fileData, key) => {
-            //     if (fileData.active) {
-            //         const currentKey = status.currentTile && status.currentSource ?
-            //             `${status.currentTile}/${status.currentSource}` : null;
-            //         if (key !== currentKey) {
-            //             fileData.active = false;
-            //         }
-            //     }
-            // });
 
-            // // Build HTML for download list (in order, column-reverse will flip it)
-            // const items = [];
-            // downloadedFiles.forEach((fileData, key) => {
-            //     const isActive = fileData.active;
-            //     const className = isActive ? 'download-item active' : 'download-item';
-            //     const sizeText = `${fileData.downloaded}/${fileData.total} ${fileData.unit || 'MB'}`;
+            // status.progress is an array: [tile, source, "14/120 kB"] or null
+            if (status.progress && Array.isArray(status.progress)) {
+                const [tile, source, progressText] = status.progress;
+                const fileKey = `${tile}/${source}.pmtiles`;
+                const displayText = progressText || '-';
 
-            //     items.push(`
-            //         <div class="${className}">
-            //             <span class="file-name">${key}</span>
-            //             <span class="file-size">${sizeText}</span>
-            //         </div>
-            //     `);
-            // });
+                currentDownloadFile = {
+                    name: fileKey,
+                    progress: displayText
+                };
 
-            // listEl.innerHTML = items.join('');
-
-            // // Auto-scroll to bottom (newest item)
-            // if (listEl.scrollHeight > listEl.clientHeight) {
-            //     listEl.scrollTop = 0; // Because of column-reverse, 0 is bottom
-            // }
+                listEl.innerHTML = `
+                    <div class="download-item active">
+                        <span class="file-name">${fileKey}</span>
+                        <span class="file-size">${displayText}</span>
+                    </div>
+                `;
+            } else if (currentDownloadFile) {
+                // Show last known file if no progress yet
+                listEl.innerHTML = `
+                    <div class="download-item active">
+                        <span class="file-name">${currentDownloadFile.name}</span>
+                        <span class="file-size">${currentDownloadFile.progress}</span>
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = '<div class="download-item">Starting download...</div>';
+            }
         }
 
         // Poll download status
@@ -585,14 +605,19 @@
             try {
                 const response = await fetch(`${API_BASE}/pmtiles/status`);
                 const status = await response.json();
+
+                // Check if download just finished
+                const wasActive = status.active;
                 updateDownloadModal(status);
 
-                // If download finished, refresh offline tiles
-                if (!status.active && (status.completedTiles.length > 0 || status.failedTiles.length > 0)) {
-                    fetchOfflineTiles();
+                // If download finished, reload page to show new tiles
+                if (!status.active && status.done >= status.total && status.total > 0) {
+                    stopPolling();
+                    setTimeout(() => window.location.reload(), 1000);
                 }
             } catch (err) {
                 console.error('Failed to poll status:', err);
+                stopPolling();
             }
         }
 
@@ -615,7 +640,8 @@
         async function cancelDownloads() {
             try {
                 await fetch(`${API_BASE}/pmtiles/cancel`, { method: 'POST' });
-                showStatus('Downloads cancelled', 'info');
+                stopPolling();
+                window.location.reload();
             } catch (err) {
                 console.error('Failed to cancel:', err);
             }
@@ -672,15 +698,12 @@
                 const data = await response.json();
 
                 if (data.error) {
-                    showStatus(`Error: ${data.message}`, 'error');
                     return;
                 }
 
-                showStatus(`Started download of ${tiles.length} tile(s)`, 'success');
                 startPolling();
             } catch (err) {
                 console.error('Failed to start download:', err);
-                showStatus('Failed to start download', 'error');
             }
         }
 
@@ -695,17 +718,14 @@
                 const data = await response.json();
 
                 if (data.error) {
-                    showStatus(`Error: ${data.message}`, 'error');
                     return;
                 }
 
-                // No notification on successful delete
                 offlineTiles.delete(tileId);
                 updateOfflineDisplay();
                 updateMapLayers();
             } catch (err) {
                 console.error('Failed to delete tile:', err);
-                showStatus(`Failed to delete ${tileId}`, 'error');
             }
         }
 
@@ -1056,7 +1076,6 @@
             const toDownload = ids.filter(id => !offlineTiles.has(id));
 
             if (toDownload.length === 0) {
-                showStatus('All selected tiles are already downloaded', 'info');
                 return;
             }
 
