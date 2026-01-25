@@ -87,14 +87,14 @@ class Soundings {
    * Load and decode a terrain tile
    */
   async loadTerrainTile(name, z, x, y) {
-    const tileData = await this.tiles.getTileData(name, z, x, y);
-    if (!tileData) {
+    const tile = await this.tiles.getTile(name, z, x, y);
+    if (!tile) {
       return null;
     }
 
     // Decode image (WebP or PNG)
     const sharp = require('sharp');
-    const image = sharp(tileData);
+    const image = sharp(tile.data);
     const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
 
     // Get encoding from source config
@@ -304,7 +304,7 @@ class Soundings {
     return this.seamap.options?.soundingsSortOrder || 'desc';
   }
 
-  async getTileJSON(req, res) {
+  async deliverTileJSON(req, res) {
     const { name } = req.params;
 
     // Verify source exists
@@ -339,7 +339,7 @@ class Soundings {
     });
   }
 
-  async getTile(req, res) {
+  async deliverTile(req, res) {
     const { name, z, x, y } = req.params;
     const zNum = parseInt(z);
     const xNum = parseInt(x);
@@ -351,28 +351,31 @@ class Soundings {
 
     // Check cache first
     let tile = this.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
-    let source = this.tiles.getCachedTile('tiles', name, zNum, xNum, yNum)
+    let source = this.tiles.getTile(name, zNum, xNum, yNum);
 
-    if (!tile || source.timestamp > tile.timestamp) {
+    let tileData = null
+    if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
-      tile = await this.generateSoundingsTile(name, zNum, xNum, yNum);
+      tileData = await this.generateSoundingsTile(name, zNum, xNum, yNum);
 
-      if (!tile) {
+      if (!tileData) {
         return res.status(204).send();
       }
 
       // Save to cache
-      this.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tile);
+      this.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tileData);
+    } else {
+      tileData = tile.data();
     }
 
     res.set('Content-Type', 'application/x-protobuf');
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tile);
+    res.send(tileData);
   }
 
   middleware(router) {
-    router.get('/soundings/:name.json', this.getTileJSON.bind(this));
-    router.get('/soundings/:name/:z/:x/:y.pbf', this.getTile.bind(this));
+    router.get('/soundings/:name.json', this.deliverTileJSON.bind(this));
+    router.get('/soundings/:name/:z/:x/:y.pbf', this.deliverTile.bind(this));
     return router;
   }
 }

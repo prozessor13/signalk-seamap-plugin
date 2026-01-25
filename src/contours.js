@@ -39,15 +39,14 @@ class Contours {
    * Load and decode a terrain tile
    */
   async loadTerrainTile(name, z, x, y) {
-    const tileData = await this.tiles.getTileData(name, z, x, y);
-    console.log("cont", tileData)
-    if (!tileData) {
+    const tile = await this.tiles.getTile(name, z, x, y);
+    if (!tile) {
       return null;
     }
 
     // Decode image (WebP or PNG)
     const sharp = require('sharp');
-    const image = sharp(tileData);
+    const image = sharp(tile.data);
     const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
 
     // Get encoding from source config
@@ -272,7 +271,7 @@ class Contours {
     return defaultLevels;
   }
 
-  async getContourTileJSON(req, res) {
+  async deliverContourTileJSON(req, res) {
     const { name } = req.params;
 
     // Verify source exists
@@ -309,7 +308,7 @@ class Contours {
     });
   }
 
-  async getContourTile(req, res) {
+  async deliverContourTile(req, res) {
     const { name, z, x, y } = req.params;
     const zNum = parseInt(z);
     const xNum = parseInt(x);
@@ -321,26 +320,29 @@ class Contours {
 
     // Check cache first
     let tile = this.tiles.getCachedTile('contours', name, zNum, xNum, yNum);
-    let source = this.tiles.getCachedTile('tiles', name, zNum, xNum, yNum)
+    let source = this.tiles.getTile(name, zNum, xNum, yNum);
 
-    if (!tile || source.timestamp > tile.timestamp) {
+    let tileData = null;
+    if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
-      tile = await this.generateContourTile(name, zNum, xNum, yNum);
+      tileData = await this.generateContourTile(name, zNum, xNum, yNum);
 
-      if (!tile) {
+      if (!tileData) {
         return res.status(204).send();
       }
 
       // Save to cache
-      this.tiles.saveTileToCache('contours', name, zNum, xNum, yNum, tile);
+      this.tiles.saveTileToCache('contours', name, zNum, xNum, yNum, tileData);
+    } else {
+      tileData = tile.data();
     }
 
     res.set('Content-Type', 'application/x-protobuf');
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tile);
+    res.send(tileData);
   }
 
-  async getBathymetryTileJSON(req, res) {
+  async deliverBathymetryTileJSON(req, res) {
     const { name } = req.params;
 
     // Verify source exists
@@ -376,7 +378,7 @@ class Contours {
     });
   }
 
-  async getBathymetryTile(req, res) {
+  async deliverBathymetryTile(req, res) {
     const { name, z, x, y } = req.params;
     const zNum = parseInt(z);
     const xNum = parseInt(x);
@@ -388,30 +390,33 @@ class Contours {
 
     // Check cache first
     let tile = this.tiles.getCachedTile('bathymetry', name, zNum, xNum, yNum);
-    let source = this.tiles.getCachedTile('tiles', name, zNum, xNum, yNum)
+    let source = this.tiles.getTile(name, zNum, xNum, yNum);
 
-    if (!tile || source.timestamp > tile.timestamp) {
+    let tileData = null;
+    if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
-      tile = await this.generateBathymetryTile(name, zNum, xNum, yNum);
+      tileData = await this.generateBathymetryTile(name, zNum, xNum, yNum);
 
-      if (!tile) {
+      if (!tileData) {
         return res.status(204).send();
       }
 
       // Save to cache
-      this.tiles.saveTileToCache('bathymetry', name, zNum, xNum, yNum, tile);
+      this.tiles.saveTileToCache('bathymetry', name, zNum, xNum, yNum, tileData);
+    } else {
+      tileData = tile.data();
     }
 
     res.set('Content-Type', 'application/x-protobuf');
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tile);
+    res.send(tileData);
   }
 
   middleware(router) {
-    router.get('/contours/:name.json', this.getContourTileJSON.bind(this));
-    router.get('/contours/:name/:z/:x/:y.pbf', this.getContourTile.bind(this));
-    router.get('/bathymetry/:name.json', this.getBathymetryTileJSON.bind(this));
-    router.get('/bathymetry/:name/:z/:x/:y.pbf', this.getBathymetryTile.bind(this));
+    router.get('/contours/:name.json', this.deliverContourTileJSON.bind(this));
+    router.get('/contours/:name/:z/:x/:y.pbf', this.deliverContourTile.bind(this));
+    router.get('/bathymetry/:name.json', this.deliverBathymetryTileJSON.bind(this));
+    router.get('/bathymetry/:name/:z/:x/:y.pbf', this.deliverBathymetryTile.bind(this));
     return router;
   }
 }

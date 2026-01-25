@@ -67,6 +67,7 @@ class Tiles {
     this.seamap = seamap;
     this.pmtiles = pmtiles;
     this.pmtilesCache = new PMTilesCache();
+    this.onlinePmtilesCache = {};
     this.isOnline = false;
     this.pendingTiles = new Map(); // key: "name_z_x_y", value: Promise
     this.startConnectivityCheck();
@@ -131,18 +132,13 @@ class Tiles {
 
     try {
       const tilePath = path.join(this.seamap.options.tilesPath, backend, source, String(z), String(x), String(y));
-
-      if (!fs.existsSync(tilePath)) {
-        return null;
+      if (fs.existsSync(tilePath)) {
+        return {
+          data: () => fs.readFileSync(tilePath),
+          timestamp: fs.statSync(tilePath).mtimeMs
+        };
       }
-
-      const stats = fs.statSync(tilePath);
-      const data = fs.readFileSync(tilePath);
-
-      return {
-        data: data,
-        timestamp: stats.mtimeMs
-      };
+      return null;
     } catch (err) {
       console.error('Error getting cached tile:', err);
       return null;
@@ -154,83 +150,16 @@ class Tiles {
 
     try {
       const tilePath = path.join(this.seamap.options.tilesPath, backend, source, String(z), String(x), String(y));
-      console.log(tilePath);
       const tileDir = path.dirname(tilePath);
 
-      if (!fs.existsSync(tileDir)) {
-        fs.mkdirSync(tileDir, { recursive: true });
-      }
+      // if (!fs.existsSync(tileDir)) {
+      //   fs.mkdirSync(tileDir, { recursive: true });
+      // }
 
-      fs.writeFileSync(tilePath, data);
+      // fs.writeFileSync(tilePath, Buffer.from(data));
     } catch (err) {
       console.error('Error saving tile to cache:', err);
     }
-  }
-
-  async fetchTileFromOnline(sourceUrl, z, x, y) {
-    return new Promise((resolve, reject) => {
-      // Create a PMTiles instance for the remote source
-      class HTTPSource {
-        constructor(url) {
-          this.url = url;
-        }
-
-        getKey() {
-          return this.url;
-        }
-
-        async getBytes(offset, length) {
-          return new Promise((resolve, reject) => {
-            const urlObj = new URL(this.url);
-            const options = {
-              host: urlObj.hostname,
-              path: urlObj.pathname,
-              headers: {
-                'Range': `bytes=${offset}-${offset + length - 1}`
-              },
-              timeout: 10000
-            };
-
-            const protocol = urlObj.protocol === 'https:' ? https : http;
-
-            const req = protocol.get(options, (res) => {
-              if (res.statusCode !== 206 && res.statusCode !== 200) {
-                reject(new Error(`HTTP ${res.statusCode}`));
-                return;
-              }
-
-              const chunks = [];
-              res.on('data', chunk => chunks.push(chunk));
-              res.on('end', () => {
-                const buffer = Buffer.concat(chunks);
-                // Convert Buffer to ArrayBuffer for PMTiles
-                const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-                resolve({ data: arrayBuffer });
-              });
-            });
-
-            req.on('error', reject);
-            req.on('timeout', () => {
-              req.destroy();
-              reject(new Error('Timeout'));
-            });
-          });
-        }
-      }
-
-      const source = new HTTPSource(sourceUrl);
-      const pmtiles = new PMTiles(source);
-
-      pmtiles.getZxy(z, x, y)
-        .then(tileData => {
-          if (tileData && tileData.data) {
-            resolve(Buffer.from(tileData.data));
-          } else {
-            resolve(null);
-          }
-        })
-        .catch(reject);
-    });
   }
 
   reduceToZoom(z, x, y, targetZ) {
@@ -238,23 +167,10 @@ class Tiles {
     return [targetZ, Math.floor(x / scale), Math.floor(y / scale)];
   }
 
-  /**
-   * Get tile data directly (for use by other modules like contours)
-   * @param {string} name - Source name
-   * @param {number} z - Zoom level
-   * @param {number} x - X coordinate
-   * @param {number} y - Y coordinate
-   * @returns {Promise<Buffer|null>} - Tile data or null
-   */
-  async getTileData(name, z, x, y) {
+  async getTile(name, z, x, y) {
     const zNum = parseInt(z);
     const xNum = parseInt(x);
     const yNum = parseInt(y);
-
-    if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
-      console.log("LJLJLJLKJLK")
-      return null;
-    }
 
     // Create unique key for this tile request
     const tileKey = `${name}_${zNum}_${xNum}_${yNum}`;
@@ -265,16 +181,14 @@ class Tiles {
     }
 
     // Create new fetch promise
-    const fetchPromise = this._fetchTileData(name, zNum, xNum, yNum)
-      .finally(() => {
-        // Clean up pending request once complete
-        this.pendingTiles.delete(tileKey);
-      });
+    const fetchPromise = this.fetchTile(name, zNum, xNum, yNum).finally(() => {
+      // Clean up pending request once complete
+      this.pendingTiles.delete(tileKey);
+    });
 
     // Store the promise so other requests can wait for it
     this.pendingTiles.set(tileKey, fetchPromise);
 
-    console.log("prom")
     return fetchPromise;
   }
 
@@ -282,75 +196,56 @@ class Tiles {
    * Internal method to actually fetch tile data
    * @private
    */
-  async _fetchTileData(name, zNum, xNum, yNum) {
+  async fetchTile(name, zNum, xNum, yNum) {
     // Get source from SOURCES
     const Pmtiles = require('./pmtiles');
-    const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
-    if (!sourceConfig) {
+    const source = Pmtiles.SOURCES().find(s => s.name === name);
+    if (!source) {
       return null;
     }
 
     // Check if tile is within zoom range
-    if (zNum < sourceConfig.minzoom || zNum > sourceConfig.maxzoom) {
+    if (zNum < source.minzoom || zNum > source.maxzoom) {
       return null;
     }
 
-    // Strategy 1: Fetch from online if connected
-    if (this.isOnline && sourceConfig.url) {
+    // check offline cache
+    const cachedTile = this.getCachedTile('tiles', name, zNum, xNum, yNum);
+    const cachedTime = cachedTile?.timestamp || 0;
+    const pmtilesFile = path.join(this.seamap.options.pmtilesPath, this.reduceToZoom(zNum, xNum, yNum, 6).join("_"), source.output);
+    const pmtilesTime = fs.existsSync(pmtilesFile) ? fs.statSync(pmtilesFile).mtimeMs : 0;
+
+    // deliver offline tiles at least for one week #FIXME make configurable
+    if (Math.max(cachedTime, pmtilesTime) > Date.now() - 7 * 24 * 3600000) {
+      if (pmtilesTime > cachedTime) {
+        const pmtiles = await this.pmtilesCache.get(pmtilesFile);
+        const tile = await pmtiles.getZxy(zNum, xNum, yNum);
+        return { timestamp: pmtilesTime, data: Buffer.from(tile.data) };
+      } else {
+        return { timestamp: cachedTile.timestamp, data: cachedTile.data() };
+      }
+    }
+
+    // fetch tile online
+    if (source.url) {
       try {
-        const onlineTile = await this.fetchTileFromOnline(sourceConfig.url, zNum, xNum, yNum);
+        if (!this.onlinePmtilesCache[source.name]) {
+          this.onlinePmtilesCache[source.name] = new PMTiles(source.url);
+        }
+        const onlineTile = await this.onlinePmtilesCache[source.name].getZxy(zNum, xNum, yNum);
         if (onlineTile) {
-          this.saveTileToCache('tiles', name, zNum, xNum, yNum, onlineTile);
-          return onlineTile;
+          this.saveTileToCache('tiles', name, zNum, xNum, yNum, onlineTile.data);
+          return { timestamp: Date.now() , data: Buffer.from(onlineTile.data) };
         }
       } catch (err) {
         console.error('Error fetching tile from online:', err);
       }
     }
 
-    // Strategy 2: Check offline PMTiles and cache
-    const [z6, x6, y6] = this.reduceToZoom(zNum, xNum, yNum, 6);
-    const sectorDir = `${z6}_${x6}_${y6}`;
-    const pmtilesFile = path.join(this.seamap.options.pmtilesPath, sectorDir, sourceConfig.output);
-
-    const cached = this.getCachedTile('tiles', name, zNum, xNum, yNum);
-
-    let offlineFileModTime = null;
-    let offlineTileData = null;
-
-    if (fs.existsSync(pmtilesFile)) {
-      try {
-        const stats = fs.statSync(pmtilesFile);
-        offlineFileModTime = stats.mtimeMs;
-
-        const pmtiles = await this.pmtilesCache.get(pmtilesFile);
-        const tileData = await pmtiles.getZxy(zNum, xNum, yNum);
-
-        if (tileData && tileData.data) {
-          offlineTileData = Buffer.from(tileData.data);
-        }
-      } catch (err) {
-        console.error('Error reading offline tile:', err);
-      }
-    }
-
-    // Use offline if newer than cache
-    if (offlineTileData && (!cached || (offlineFileModTime && offlineFileModTime > cached.timestamp))) {
-      if (this.isOnline) {
-        this.saveTileToCache('tiles', name, zNum, xNum, yNum, offlineTileData);
-      }
-      return offlineTileData;
-    }
-
-    // Use cache if available
-    if (cached) {
-      return cached.data;
-    }
-
     return null;
   }
 
-  async getTile(req, res) {
+  async deliverTile(req, res) {
     const { name, z, x, y } = req.params;
     const zNum = parseInt(z);
     const xNum = parseInt(x);
@@ -362,29 +257,29 @@ class Tiles {
 
     // Get source from SOURCES
     const Pmtiles = require('./pmtiles');
-    const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
-    if (!sourceConfig) {
+    const source = Pmtiles.SOURCES().find(s => s.name === name);
+    if (!source) {
       return res.status(404).send('Source not found');
     }
 
     // Check if tile is within zoom range
-    if (zNum < sourceConfig.minzoom || zNum > sourceConfig.maxzoom) {
+    if (zNum < source.minzoom || zNum > source.maxzoom) {
       return res.status(204).send();
     }
 
-    // Use getTileData to fetch the tile
-    const tileData = await this.getTileData(name, zNum, xNum, yNum);
+    // Use getTile to fetch the tile
+    const tileData = await this.getTile(name, zNum, xNum, yNum);
 
     if (!tileData) {
       return res.status(204).send();
     }
 
-    res.set('Content-Type', sourceConfig.contentType);
+    res.set('Content-Type', source.contentType);
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tileData);
+    res.send(tileData.data);
   }
 
-  async getTileJSON(req, res) {
+  async deliverTileJSON(req, res) {
     const { name } = req.params;
 
     // Get source from SOURCES
@@ -412,8 +307,8 @@ class Tiles {
   }
 
   middleware(router) {
-    router.get('/tiles/:name.json', this.getTileJSON.bind(this));
-    router.get('/tiles/:name/:z/:x/:y.:format', this.getTile.bind(this));
+    router.get('/tiles/:name.json', this.deliverTileJSON.bind(this));
+    router.get('/tiles/:name/:z/:x/:y.:format', this.deliverTile.bind(this));
     return router;
   }
 }

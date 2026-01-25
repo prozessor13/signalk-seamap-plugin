@@ -93,7 +93,6 @@
             "id": "bathymetry_relief",
             "type": "color-relief",
             "source": "dem",
-            "maxzoom": 8,
             "paint": {
                 "color-relief-color": [
                     "interpolate",

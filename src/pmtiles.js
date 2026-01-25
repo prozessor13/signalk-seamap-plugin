@@ -1,12 +1,12 @@
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const { exec, spawn } = require('child_process');
 
 class Pmtiles {
   constructor(seamap) {
     this.seamap = seamap;
     this.state = this.emtpyState();
+    this.cache = {};
   }
 
   static SOURCES() {

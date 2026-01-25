@@ -16,7 +16,9 @@ class Glyphs {
       return res.status(400).send('Invalid range format');
     }
 
-    const glyphPath = path.join(GLYPHS_DIR, fontstack, `${range}.pbf`);
+    const fonts = fontstack.split(",");
+    const glyphPath = path.join(GLYPHS_DIR, fonts[0], `${range}.pbf`);
+    console.log(glyphPath)
 
     // Security: ensure path is within glyphs directory
     const resolvedPath = path.resolve(glyphPath);
