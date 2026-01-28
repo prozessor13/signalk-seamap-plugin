@@ -4,7 +4,9 @@ Global Seacharts based on OSM/Gebco/Emod for SignalK
 
 ## Overview
 
-This plugin provides offline-first map tile serving for SignalK with intelligent fallback strategies. It supports both vector tiles (MVT/PBF) and raster tiles (PNG/JPEG/WebP) from multiple sources.
+**Note:** This README was auto-generated with Claude Code and has not yet been manually verified. Please be aware that some sections may contain inaccuracies.
+
+This plugin provides offline-first map tile serving for SignalK with intelligent fallback strategies. It supports both vector tiles (MVT/PBF) and raster tiles (PNG/JPEG/WebP) from multiple sources. Also this Project is in very alpha-stage, and more a backup-checkin instead of a working prototype!
 
 ## Features
 

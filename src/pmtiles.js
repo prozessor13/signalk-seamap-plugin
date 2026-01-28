@@ -39,6 +39,7 @@ class Pmtiles {
         maxzoom: 10,
         format: 'webp',
         contentType: 'image/webp',
+        tileSize: 512,
         encoding: 'terrarium',
         attribution: '<a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>'
       },
@@ -50,6 +51,7 @@ class Pmtiles {
         maxzoom: 9,
         format: 'webp',
         contentType: 'image/webp',
+        tileSize: 512,
         encoding: 'terrarium',
         attribution: '<a href="https://www.gebco.net" target="_blank">© GEBCO</a>'
       },
@@ -61,6 +63,7 @@ class Pmtiles {
         maxzoom: 11,
         format: 'webp',
         contentType: 'image/webp',
+        tileSize: 512,
         encoding: 'terrarium',
         attribution: '<a href="https://emodnet.ec.europa.eu" target="_blank">© EMODnet</a>'
       }

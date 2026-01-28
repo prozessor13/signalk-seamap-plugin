@@ -127,6 +127,7 @@ class Contours {
       }
     }
 
+    console.log("load tiles", neighborPromises.length);
     const neighbors = await Promise.all(neighborPromises);
 
     // Check if center tile exists
@@ -323,7 +324,7 @@ class Contours {
     let source = this.tiles.getTile(name, zNum, xNum, yNum);
 
     let tileData = null;
-    if (!tile || source?.timestamp > tile.timestamp) {
+    if (true || !tile || source?.timestamp > tile.timestamp) {
       // Generate tile
       tileData = await this.generateContourTile(name, zNum, xNum, yNum);
 

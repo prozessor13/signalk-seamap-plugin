@@ -18,67 +18,31 @@
     "sources": {
         "osm": {
             "type": "vector",
-            "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OSM</a>",
-            "tiles": [
-                "{SEAMAP_HOST}/tiles/osm/{z}/{x}/{y}.pbf"
-            ],
-            "scheme": "xyz",
-            "bounds": [
-                -180,
-                -85.0511287798066,
-                180,
-                85.0511287798066
-            ],
-            "minzoom": 0,
-            "maxzoom": 14
+            "url": "{SEAMAP_HOST}/tiles/osm.json"
         },
         "seamap": {
             "type": "vector",
-            "tiles": [
-                "{SEAMAP_HOST}/tiles/seamap/{z}/{x}/{y}.pbf"
-            ],
-            "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OSM</a>",
-            "maxzoom": 14
+            "url": "{SEAMAP_HOST}/tiles/seamap.json"
         },
         "mapterhorn": {
             "type": "raster-dem",
-            "tiles": [
-                "{SEAMAP_HOST}/tiles/mapterhorn/{z}/{x}/{y}.webp"
-            ],
-            "encoding": "terrarium",
-            "tileSize": 512,
-            "maxzoom": 12
+            "url": "{SEAMAP_HOST}/tiles/mapterhorn.json"
         },
-        "contours": {
+        "mapterhorn_contours": {
             "type": "vector",
-            "tiles": [
-                "{SEAMAP_HOST}/contours/mapterhorn/{z}/{x}/{y}.pbf"
-            ],
-            "maxzoom": 14
-        },
-        "dem": {
-            "type": "raster-dem",
-            "tiles": [
-                "{SEAMAP_HOST}/tiles/emod/{z}/{x}/{y}.webp"
-            ],
-            "attribution": "<a href=\"https://emodnet.ec.europa.eu\" target=\"_blank\">© EMODnet</a>",
-            "encoding": "terrarium",
-            "tileSize": 512,
-            "maxzoom": 11
+            "url": "{SEAMAP_HOST}/contours/mapterhorn.json"
         },
         "bathymetry": {
-            "type": "vector",
-            "tiles": [
-                "{SEAMAP_HOST}/bathymetry/emod/{z}/{x}/{y}.pbf"
-            ],
-            "maxzoom": 14
+            "type": "raster-dem",
+            "url": "{SEAMAP_HOST}/tiles/emod.json"
         },
-        "soundings": {
+        "bathymetry_contours": {
             "type": "vector",
-            "tiles": [
-                "{SEAMAP_HOST}/soundings/emod/{z}/{x}/{y}.pbf"
-            ],
-            "maxzoom": 14
+            "url": "{SEAMAP_HOST}/bathymetry/emod.json"
+        },
+        "bathymetry_soundings": {
+            "type": "vector",
+            "url": "{SEAMAP_HOST}/soundings/emod.json"
         }
     },
     "layers": [
@@ -92,7 +56,7 @@
         {
             "id": "bathymetry_relief",
             "type": "color-relief",
-            "source": "dem",
+            "source": "bathymetry",
             "paint": {
                 "color-relief-color": [
                     "interpolate",
@@ -111,7 +75,7 @@
         {
             "id": "bathymetry_shading",
             "type": "hillshade",
-            "source": "dem",
+            "source": "bathymetry",
             "paint": {
                 "hillshade-exaggeration": 0.14,
                 "hillshade-method": "combined"
@@ -199,8 +163,8 @@
         {
             "id": "bathymetry_contours",
             "type": "line",
-            "source": "bathymetry",
-            "source-layer": "contours",
+            "source": "bathymetry_contours",
+            "source-layer": "bathymetry",
             "minzoom": 5,
             "paint": {
                 "line-color": "#777",
@@ -211,8 +175,8 @@
         {
             "id": "bathymetry_contours_label",
             "type": "symbol",
-            "source": "bathymetry",
-            "source-layer": "contours",
+            "source": "bathymetry_contours",
+            "source-layer": "bathymetry",
             "minzoom": 8,
             "maxzoom": 22,
             "layout": {
@@ -224,7 +188,7 @@
                         "round",
                         [
                             "get",
-                            "ele"
+                            "elevation"
                         ]
                     ]
                 ],
@@ -260,13 +224,13 @@
         {
             "id": "spot-soundings",
             "type": "symbol",
-            "source": "soundings",
+            "source": "bathymetry_soundings",
             "source-layer": "soundings",
             "filter": [
                 ">",
                 [
                     "get",
-                    "ele"
+                    "elevation"
                 ],
                 5
             ],
@@ -277,7 +241,7 @@
                         "round",
                         [
                             "get",
-                            "ele"
+                            "elevation"
                         ]
                     ]
                 ],
@@ -313,7 +277,7 @@
         {
             "id": "spot-soundings-shallow",
             "type": "symbol",
-            "source": "soundings",
+            "source": "bathymetry_soundings",
             "source-layer": "soundings",
             "filter": [
                 "all",
@@ -321,7 +285,7 @@
                     "<=",
                     [
                         "get",
-                        "ele"
+                        "elevation"
                     ],
                     5
                 ],
@@ -329,7 +293,7 @@
                     ">",
                     [
                         "get",
-                        "ele"
+                        "elevation"
                     ],
                     0.1
                 ]
@@ -337,7 +301,7 @@
             "layout": {
                 "symbol-sort-key": [
                     "get",
-                    "ele"
+                    "elevation"
                 ],
                 "text-field": [
                     "to-string",
@@ -349,7 +313,7 @@
                                 "*",
                                 [
                                     "get",
-                                    "ele"
+                                    "elevation"
                                 ],
                                 10
                             ]
@@ -1561,13 +1525,13 @@
         {
             "id": "contours",
             "type": "line",
-            "source": "contours",
+            "source": "mapterhorn_contours",
             "source-layer": "contours",
             "filter": [
                 ">",
                 [
                     "get",
-                    "ele"
+                    "elevation"
                 ],
                 0
             ],
@@ -1588,14 +1552,14 @@
         {
             "id": "contour-label",
             "type": "symbol",
-            "source": "contours",
+            "source": "mapterhorn_contours",
             "source-layer": "contours",
             "minzoom": 10,
             "filter": [
                 ">",
                 [
                     "get",
-                    "ele"
+                    "elevation"
                 ],
                 0
             ],
@@ -1606,7 +1570,7 @@
                     "number-format",
                     [
                         "get",
-                        "ele"
+                        "elevation"
                     ],
                     {}
                 ],

@@ -18,7 +18,6 @@ class Glyphs {
 
     const fonts = fontstack.split(",");
     const glyphPath = path.join(GLYPHS_DIR, fonts[0], `${range}.pbf`);
-    console.log(glyphPath)
 
     // Security: ensure path is within glyphs directory
     const resolvedPath = path.resolve(glyphPath);

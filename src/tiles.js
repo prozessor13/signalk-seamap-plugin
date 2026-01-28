@@ -17,7 +17,7 @@ class FileSource {
     await new Promise((resolve, reject) => {
       fs.read(this.fd, buffer, 0, length, offset, (err) => err ? reject(err) : resolve());
     });
-    return { data: buffer };
+    return { data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) };
   }
   close() {
     fs.closeSync(this.fd);
@@ -152,11 +152,11 @@ class Tiles {
       const tilePath = path.join(this.seamap.options.tilesPath, backend, source, String(z), String(x), String(y));
       const tileDir = path.dirname(tilePath);
 
-      // if (!fs.existsSync(tileDir)) {
-      //   fs.mkdirSync(tileDir, { recursive: true });
-      // }
+      if (!fs.existsSync(tileDir)) {
+        fs.mkdirSync(tileDir, { recursive: true });
+      }
 
-      // fs.writeFileSync(tilePath, Buffer.from(data));
+      fs.writeFileSync(tilePath, Buffer.from(data));
     } catch (err) {
       console.error('Error saving tile to cache:', err);
     }
@@ -299,6 +299,8 @@ class Tiles {
       attribution: source.attribution || '',
       scheme: 'xyz',
       tiles: [`${req.protocol}://${req.get('host')}/plugins/signalk-seamap-plugin/tiles/${name}/{z}/{x}/{y}.${source.format}`],
+      encoding: source.encoding,
+      tileSize: source.tileSize,
       minzoom: source.minzoom,
       maxzoom: source.maxzoom,
       bounds: [-180, -85, 180, 85],
