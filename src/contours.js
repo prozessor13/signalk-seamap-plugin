@@ -1,9 +1,8 @@
-const fs = require('fs');
-const path = require('path');
 const { HeightTile } = require('./maplibre-contour/height_tile.js');
 const generateIsolines = require('./maplibre-contour/isolines.js').default;
 const encodeVectorTile = require('./maplibre-contour/vtpbf.js').default;
 const { GeomType } = require('./maplibre-contour/vtpbf.js');
+const Pmtiles = require('./pmtiles');
 
 class Contours {
   constructor(seamap, tiles) {
@@ -47,10 +46,13 @@ class Contours {
     // Decode image (WebP or PNG)
     const sharp = require('sharp');
     const image = sharp(tile.data);
-    const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
+    // Ensure we get RGBA format (4 channels) for consistent decoding
+    const { data, info } = await image
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
     // Get encoding from source config
-    const Pmtiles = require('./pmtiles');
     const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
     const encoding = sourceConfig?.encoding || 'terrarium';
 
@@ -64,73 +66,99 @@ class Contours {
   }
 
   /**
-   * Load tiles with overzoom support for better performance
-   * @param {number} overzoom - 0 = use same zoom (9 tiles), 1 = use lower zoom (up to 3 tiles)
+   * Load a single DEM tile with overzoom support (with caching)
+   * Similar to fetchDem in local-dem-manager.ts
+   * @param {number} overzoom - Number of zoom levels to go down (0 = same zoom, 1 = one zoom level lower)
    */
-  async loadHeightTileWithNeighbors(name, z, x, y, overzoom = 1) {
+  async loadDemTile(name, z, x, y, overzoom = 0) {
     // Get source maxzoom
-    const Pmtiles = require('./pmtiles');
     const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
     const maxzoom = sourceConfig?.maxzoom || 14;
 
     // Calculate actual zoom to fetch
-    const fetchZoom = Math.min(z - overzoom, maxzoom);
-    const zoomDiff = z - fetchZoom;
-    const scale = 1 << zoomDiff;
+    const zoom = Math.min(z - overzoom, maxzoom);
+    const subZ = z - zoom;
+    const div = 1 << subZ;
+    const newX = Math.floor(x / div);
+    const newY = Math.floor(y / div);
 
-    // Calculate which tile to fetch at lower zoom
-    const fetchX = Math.floor(x / scale);
-    const fetchY = Math.floor(y / scale);
+    // Check cache for the base tile (before splitting)
+    const cacheKey = `${name}/${zoom}/${newX}/${newY}`;
 
-    // Calculate position within the fetched tile
-    const subX = x % scale;
-    const subY = y % scale;
+    // Initialize cache if it doesn't exist
+    if (!this._demTileCache) {
+      this._demTileCache = new Map();
+    }
 
-    const max = 1 << fetchZoom;
+    // Check if we already have an in-flight request for this tile
+    if (this._demTileCache.has(cacheKey)) {
+      const tile = await this._demTileCache.get(cacheKey);
+
+      // Split if needed
+      if (subZ > 0 && tile) {
+        return tile.split(subZ, x % div, y % div);
+      }
+      return tile;
+    }
+
+    // Create promise for loading the tile and cache it immediately
+    const tilePromise = this.loadTerrainTile(name, zoom, newX, newY);
+    this._demTileCache.set(cacheKey, tilePromise);
+
+    const tile = await tilePromise;
+
+    if (!tile) {
+      // Remove from cache if load failed
+      this._demTileCache.delete(cacheKey);
+      return null;
+    }
+
+    // Split to get the correct sub-tile for the requested position (only if we did overzoom)
+    if (subZ > 0) {
+      return tile.split(subZ, x % div, y % div);
+    }
+
+    return tile;
+  }
+
+  /**
+   * Load tiles with neighbors for contour generation
+   * Similar to fetchContourTile in local-dem-manager.ts
+   * @param {number} overzoom - 0 = use same zoom (9 tiles), 1 = use lower zoom (9 tiles at z-1)
+   */
+  async loadHeightTileWithNeighbors(name, z, x, y, overzoom = 1) {
+    const max = 1 << z;
     const neighborPromises = [];
 
-    // Determine which neighbors we need based on position within tile
-    // If we're at the edge, we need neighbors, otherwise we don't
-    const needWest = subX === 0;
-    const needEast = subX === scale - 1;
-    const needNorth = subY === 0;
-    const needSouth = subY === scale - 1;
+    // Clear cache before loading new set of tiles
+    if (this._demTileCache) {
+      this._demTileCache.clear();
+    }
 
-    // Load neighbors in 3x3 grid, but only if needed
-    for (let iy = -1; iy <= 1; iy++) {
-      for (let ix = -1; ix <= 1; ix++) {
-        let tilePromise;
-
-        // Skip tiles we don't need
-        if (ix === -1 && !needWest) {
-          tilePromise = Promise.resolve(null);
-        } else if (ix === 1 && !needEast) {
-          tilePromise = Promise.resolve(null);
-        } else if (iy === -1 && !needNorth) {
-          tilePromise = Promise.resolve(null);
-        } else if (iy === 1 && !needSouth) {
-          tilePromise = Promise.resolve(null);
+    // Load 3x3 grid of neighbors
+    for (let iy = y - 1; iy <= y + 1; iy++) {
+      for (let ix = x - 1; ix <= x + 1; ix++) {
+        // Handle Y boundaries (no wrapping)
+        if (iy < 0 || iy >= max) {
+          neighborPromises.push(Promise.resolve(null));
         } else {
-          // Load the tile
-          const tileX = (fetchX + ix + max) % max;
-          const tileY = fetchY + iy;
-
-          // Clamp Y coordinate
-          if (tileY < 0 || tileY >= max) {
-            tilePromise = Promise.resolve(null);
-          } else {
-            tilePromise = this.loadTerrainTile(name, fetchZoom, tileX, tileY);
-          }
+          // Handle X wrapping (wrap around at date line)
+          const wrappedX = (ix + max) % max;
+          neighborPromises.push(
+            this.loadDemTile(name, z, wrappedX, iy, overzoom)
+          );
         }
-
-        neighborPromises.push(tilePromise);
       }
     }
 
-    console.log("load tiles", neighborPromises.length);
     const neighbors = await Promise.all(neighborPromises);
 
-    // Check if center tile exists
+    // Clear cache after loading (keep memory usage low)
+    if (this._demTileCache) {
+      this._demTileCache.clear();
+    }
+
+    // Check if center tile exists (index 4 in 3x3 grid)
     if (!neighbors[4]) {
       return null;
     }
@@ -146,13 +174,8 @@ class Contours {
       }
     }
 
-    // Combine neighbors
-    let heightTile = HeightTile.combineNeighbors(neighbors);
-
-    // If we fetched a lower zoom tile, split it to get the correct quadrant
-    if (zoomDiff > 0 && heightTile) {
-      heightTile = heightTile.split(zoomDiff, subX, subY);
-    }
+    // Combine all 9 tiles into one virtual tile
+    const heightTile = HeightTile.combineNeighbors(neighbors);
 
     return heightTile;
   }
@@ -245,9 +268,8 @@ class Contours {
    * Get contour interval based on zoom level (returns single number for interval-based generation)
    */
   getContourInterval(z) {
-    // Zoom-dependent intervals (similar to MTK terrain)
-    if (z >= 15) return 10;
-    if (z >= 14) return 20;
+    if (z >= 14) return 10;
+    if (z >= 13) return 20;
     if (z >= 12) return 50;
     if (z >= 10) return 100;
     if (z >= 8) return 200;
@@ -276,7 +298,6 @@ class Contours {
     const { name } = req.params;
 
     // Verify source exists
-    const Pmtiles = require('./pmtiles');
     const source = Pmtiles.SOURCES().find(s => s.name === name);
     if (!source) {
       return res.status(404).send('Source not found');
@@ -295,7 +316,7 @@ class Contours {
         `${req.protocol}://${req.get('host')}/plugins/signalk-seamap-plugin/contours/${name}/{z}/{x}/{y}.pbf`
       ],
       minzoom: source.minzoom,
-      maxzoom: Math.min(source.maxzoom, 14),
+      maxzoom: 14,
       bounds: [-180, -85, 180, 85],
       center: [0, 0, 1],
       format: 'pbf',
@@ -324,7 +345,7 @@ class Contours {
     let source = this.tiles.getTile(name, zNum, xNum, yNum);
 
     let tileData = null;
-    if (true || !tile || source?.timestamp > tile.timestamp) {
+    if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
       tileData = await this.generateContourTile(name, zNum, xNum, yNum);
 
@@ -347,7 +368,6 @@ class Contours {
     const { name } = req.params;
 
     // Verify source exists
-    const Pmtiles = require('./pmtiles');
     const source = Pmtiles.SOURCES().find(s => s.name === name);
     if (!source) {
       return res.status(404).send('Source not found');

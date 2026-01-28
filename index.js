@@ -14,7 +14,7 @@ module.exports = function(app) {
   const pmtiles = new Pmtiles(seamap);
   const tiles = new Tiles(seamap, pmtiles);
   const contours = new Contours(seamap, tiles);
-  const soundings = new Soundings(seamap, tiles);
+  const soundings = new Soundings(seamap, contours);
 
   return {
     id: 'signalk-seamap-plugin',

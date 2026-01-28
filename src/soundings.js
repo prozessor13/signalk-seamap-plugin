@@ -1,6 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-const { HeightTile } = require('./maplibre-contour/height_tile.js');
 const encodeVectorTile = require('./maplibre-contour/vtpbf.js').default;
 const { GeomType } = require('./maplibre-contour/vtpbf.js');
 
@@ -45,7 +42,7 @@ function generateJitteredGrid(minx, miny, maxx, maxy, spacing, tileX, tileY, til
       const x = minx + i * spacing + dx + spacing / 4;
       const y = miny + j * spacing + dy + spacing / 4;
       if (x < maxx && y < maxy) {
-        points.push([x, y]);
+        points.push([Math.floor(x), Math.floor(y)]);
       }
     }
   }
@@ -54,160 +51,16 @@ function generateJitteredGrid(minx, miny, maxx, maxy, spacing, tileX, tileY, til
 }
 
 class Soundings {
-  constructor(seamap, tiles) {
+  constructor(seamap, contours) {
     this.seamap = seamap;
-    this.tiles = tiles;
-  }
-
-  /**
-   * Decode terrain RGB tile to height data
-   * Supports Terrarium encoding: (R * 256 + G + B / 256) - 32768
-   */
-  decodeTerrainRGB(imageData, width, height, encoding = 'terrarium') {
-    const pixels = width * height;
-    const elevations = new Float32Array(pixels);
-
-    for (let i = 0; i < pixels; i++) {
-      const r = imageData[i * 4];
-      const g = imageData[i * 4 + 1];
-      const b = imageData[i * 4 + 2];
-
-      if (encoding === 'terrarium') {
-        elevations[i] = r * 256 + g + b / 256 - 32768;
-      } else {
-        // Mapbox encoding: -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1)
-        elevations[i] = -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
-      }
-    }
-
-    return elevations;
-  }
-
-  /**
-   * Load and decode a terrain tile
-   */
-  async loadTerrainTile(name, z, x, y) {
-    const tile = await this.tiles.getTile(name, z, x, y);
-    if (!tile) {
-      return null;
-    }
-
-    // Decode image (WebP or PNG)
-    const sharp = require('sharp');
-    const image = sharp(tile.data);
-    const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
-
-    // Get encoding from source config
-    const Pmtiles = require('./pmtiles');
-    const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
-    const encoding = sourceConfig?.encoding || 'terrarium';
-
-    const elevations = this.decodeTerrainRGB(data, info.width, info.height, encoding);
-
-    return HeightTile.fromRawDem({
-      data: elevations,
-      width: info.width,
-      height: info.height
-    });
-  }
-
-  /**
-   * Load tiles with overzoom support
-   */
-  async loadHeightTileWithNeighbors(name, z, x, y, overzoom = 1) {
-    // Get source maxzoom
-    const Pmtiles = require('./pmtiles');
-    const sourceConfig = Pmtiles.SOURCES().find(s => s.name === name);
-    const maxzoom = sourceConfig?.maxzoom || 14;
-
-    // Calculate actual zoom to fetch
-    const fetchZoom = Math.min(z - overzoom, maxzoom);
-    const zoomDiff = z - fetchZoom;
-    const scale = 1 << zoomDiff;
-
-    // Calculate which tile to fetch at lower zoom
-    const fetchX = Math.floor(x / scale);
-    const fetchY = Math.floor(y / scale);
-
-    // Calculate position within the fetched tile
-    const subX = x % scale;
-    const subY = y % scale;
-
-    const max = 1 << fetchZoom;
-    const neighborPromises = [];
-
-    // Determine which neighbors we need based on position within tile
-    const needWest = subX === 0;
-    const needEast = subX === scale - 1;
-    const needNorth = subY === 0;
-    const needSouth = subY === scale - 1;
-
-    // Load neighbors in 3x3 grid, but only if needed
-    for (let iy = -1; iy <= 1; iy++) {
-      for (let ix = -1; ix <= 1; ix++) {
-        let tilePromise;
-
-        // Skip tiles we don't need
-        if (ix === -1 && !needWest) {
-          tilePromise = Promise.resolve(null);
-        } else if (ix === 1 && !needEast) {
-          tilePromise = Promise.resolve(null);
-        } else if (iy === -1 && !needNorth) {
-          tilePromise = Promise.resolve(null);
-        } else if (iy === 1 && !needSouth) {
-          tilePromise = Promise.resolve(null);
-        } else {
-          // Load the tile
-          const tileX = (fetchX + ix + max) % max;
-          const tileY = fetchY + iy;
-
-          // Clamp Y coordinate
-          if (tileY < 0 || tileY >= max) {
-            tilePromise = Promise.resolve(null);
-          } else {
-            tilePromise = this.loadTerrainTile(name, fetchZoom, tileX, tileY);
-          }
-        }
-
-        neighborPromises.push(tilePromise);
-      }
-    }
-
-    const neighbors = await Promise.all(neighborPromises);
-
-    // Check if center tile exists
-    if (!neighbors[4]) {
-      return null;
-    }
-
-    // Replace missing neighbors with empty tiles of same size
-    for (let i = 0; i < neighbors.length; i++) {
-      if (!neighbors[i] && neighbors[4]) {
-        neighbors[i] = HeightTile.fromRawDem({
-          data: new Float32Array(neighbors[4].width * neighbors[4].height).fill(NaN),
-          width: neighbors[4].width,
-          height: neighbors[4].height
-        });
-      }
-    }
-
-    // Combine neighbors
-    let heightTile = HeightTile.combineNeighbors(neighbors);
-
-    // If we fetched a lower zoom tile, split it to get the correct quadrant
-    if (zoomDiff > 0 && heightTile) {
-      heightTile = heightTile.split(zoomDiff, subX, subY);
-    }
-
-    return heightTile;
+    this.contours = contours;
   }
 
   /**
    * Generate soundings tile
    */
-  async generateSoundingsTile(name, z, x, y, overzoom = 1) {
-    let heightTile = await this.loadHeightTileWithNeighbors(name, z, x, y, overzoom);
-
+  async generateSoundingsTile(name, z, x, y) {
+    let heightTile = await this.contours.loadDemTile(name, z, x, y);
     if (!heightTile) {
       return null;
     }
@@ -224,7 +77,7 @@ class Soundings {
     }
 
     // Get grid spacing from config (pixels at 512px tile)
-    const spotGridSpacing = this.getSoundingsGridSpacing(z);
+    const spotGridSpacing = z >= 14 ? 16 : 32;
     const extent = 4096;
     const spacingInExtent = (spotGridSpacing / 512) * extent;
 
@@ -232,7 +85,6 @@ class Soundings {
 
     // Sample elevation at each grid point
     const pointFeatures = [];
-    const isBathymetry = name.includes('bathymetry') || name.includes('gebco');
 
     for (const [px, py] of gridPoints) {
       const tileX = Math.floor((px / extent) * heightTile.width);
@@ -245,13 +97,8 @@ class Soundings {
         // Skip NaN or invalid values
         if (!isNaN(elevation)) {
           const properties = {
-            elevation: Math.round(elevation * 10) / 10
+            depth: Math.round(Math.abs(elevation) * 10) / 10
           };
-
-          // For bathymetry, add depth property
-          if (isBathymetry && elevation < 0) {
-            properties.depth = Math.round(Math.abs(elevation) * 10) / 10;
-          }
 
           pointFeatures.push({
             type: GeomType.POINT,
@@ -262,13 +109,7 @@ class Soundings {
       }
     }
 
-    // Sort by elevation (descending for bathymetry, ascending for terrain)
-    const sortOrder = this.getSoundingsSortOrder();
-    pointFeatures.sort((a, b) => {
-      const eleA = a.properties.elevation;
-      const eleB = b.properties.elevation;
-      return sortOrder === 'asc' ? eleA - eleB : eleB - eleA;
-    });
+    pointFeatures.sort((a, b) => a.properties.depth - b.properties.depth);
 
     // Encode to vector tile
     const pbf = encodeVectorTile({
@@ -281,27 +122,6 @@ class Soundings {
     });
 
     return Buffer.from(pbf);
-  }
-
-  /**
-   * Get soundings grid spacing based on zoom level (in pixels at 512px tile size)
-   */
-  getSoundingsGridSpacing(z) {
-    // Default spacing based on zoom level
-    // Higher zoom = denser grid
-    if (z >= 15) return 64;   // ~16 points per tile
-    if (z >= 14) return 96;   // ~12 points per tile
-    if (z >= 12) return 128;  // ~8 points per tile
-    if (z >= 10) return 192;  // ~5 points per tile
-    if (z >= 8) return 256;   // ~3 points per tile
-    return 384;               // ~2 points per tile
-  }
-
-  /**
-   * Get soundings sort order from config
-   */
-  getSoundingsSortOrder() {
-    return this.seamap.options?.soundingsSortOrder || 'desc';
   }
 
   async deliverTileJSON(req, res) {
@@ -332,7 +152,6 @@ class Soundings {
       vector_layers: [{
         id: 'soundings',
         fields: {
-          elevation: 'Number',
           depth: 'Number'
         }
       }]
@@ -350,9 +169,10 @@ class Soundings {
     }
 
     // Check cache first
-    let tile = this.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
-    let source = this.tiles.getTile(name, zNum, xNum, yNum);
+    let tile = this.contours.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
+    let source = this.contours.tiles.getTile(name, zNum, xNum, yNum);
 
+    tile = null;
     let tileData = null
     if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
@@ -363,7 +183,7 @@ class Soundings {
       }
 
       // Save to cache
-      this.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tileData);
+      this.contours.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tileData);
     } else {
       tileData = tile.data();
     }
