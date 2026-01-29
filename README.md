@@ -17,6 +17,20 @@ This plugin provides offline-first map tile serving for SignalK with intelligent
 - **Custom Styles**: MapLibre GL style definitions
 - **On-Demand Contour Lines**: Dynamically generates contour and bathymetry lines with filesystem caching
 
+## Screenshots
+
+### Download Management Interface
+
+The web application provides a user-friendly interface for managing PMTiles downloads and viewing offline-available regions.
+
+![Webapp](public/download.png)
+
+### Interactive Map Demo
+
+The web application includes a basic MapLibre GL map that integrates all tile sources from this plugin combined with SignalK vessel data.
+
+![Demo](public/demo.png)
+
 ## Architecture
 
 ### File Structure
