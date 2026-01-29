@@ -2,25 +2,901 @@
   "openapi": "3.0.0",
   "info": {
     "version": "0.0.1",
-    "title": "Signal K Seamap Plugin OpenApi",
+    "title": "Signal K Seamap Plugin API",
+    "description": "Global sea charts based on OSM/Gebco/Emod with contour generation and bathymetry support",
     "license": {
       "name": "Apache 2.0",
       "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
     }
   },
+  "servers": [
+    {
+      "url": "/plugins/signalk-seamap-plugin",
+      "description": "Plugin base path"
+    }
+  ],
   "paths": {
-    "/download": {
+    "/tiles/{name}.json": {
       "get": {
-        "tags": [],
-        "description": "Download a pmtiles file from Maptoolkit PMTiles",
+        "tags": ["Tiles"],
+        "summary": "Get TileJSON metadata for a tile source",
+        "description": "Returns TileJSON 3.0.0 metadata for the specified tile source",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Tile source name (seamap, osm, mapterhorn, gebco, emod)",
+            "schema": {
+              "type": "string",
+              "enum": ["seamap", "osm", "mapterhorn", "gebco", "emod"]
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "properties": {
-              "message": "string"
+            "description": "TileJSON metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tilejson": { "type": "string" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "version": { "type": "string" },
+                    "attribution": { "type": "string" },
+                    "scheme": { "type": "string" },
+                    "tiles": { "type": "array", "items": { "type": "string" } },
+                    "minzoom": { "type": "integer" },
+                    "maxzoom": { "type": "integer" },
+                    "bounds": { "type": "array", "items": { "type": "number" } },
+                    "center": { "type": "array", "items": { "type": "number" } }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found"
+          }
+        }
+      }
+    },
+    "/tiles/{name}/{z}/{x}/{y}.{format}": {
+      "get": {
+        "tags": ["Tiles"],
+        "summary": "Get a map tile",
+        "description": "Delivers a tile from PMTiles with multi-strategy fallback (cache, offline PMTiles, online PMTiles)",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Tile source name",
+            "schema": {
+              "type": "string",
+              "enum": ["seamap", "osm", "mapterhorn", "gebco", "emod"]
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 14
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile X coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile Y coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "format",
+            "in": "path",
+            "required": true,
+            "description": "Tile format",
+            "schema": {
+              "type": "string",
+              "enum": ["pbf", "webp"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tile data",
+            "content": {
+              "application/x-protobuf": {},
+              "image/webp": {}
+            }
+          },
+          "204": {
+            "description": "No tile available"
+          },
+          "400": {
+            "description": "Invalid tile coordinates"
+          },
+          "404": {
+            "description": "Source not found"
+          }
+        }
+      }
+    },
+    "/pmtiles": {
+      "get": {
+        "tags": ["PMTiles Management"],
+        "summary": "List downloaded tile sectors",
+        "description": "Lists all downloaded PMTiles sectors/directories",
+        "responses": {
+          "200": {
+            "description": "List of tile directories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pmtilesPath": { "type": "string" },
+                    "basePath": { "type": "string" },
+                    "tiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "created": { "type": "string", "format": "date-time" },
+                          "modified": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PMTiles CLI not installed"
+          }
+        }
+      },
+      "post": {
+        "tags": ["PMTiles Management"],
+        "summary": "Download PMTiles sectors",
+        "description": "Downloads PMTiles data for specified tile sectors. Accepts single tile or comma-separated list.",
+        "parameters": [
+          {
+            "name": "tile",
+            "in": "query",
+            "required": true,
+            "description": "Tile coordinate(s) in format z/x/y (e.g., '6/34/22' or '6/34/22,6/34/23')",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Download started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "tiles": { "type": "array", "items": { "type": "string" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tile parameter"
+          },
+          "503": {
+            "description": "PMTiles CLI not installed"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["PMTiles Management"],
+        "summary": "Delete a downloaded tile sector",
+        "description": "Deletes a PMTiles sector directory",
+        "parameters": [
+          {
+            "name": "tile",
+            "in": "query",
+            "required": true,
+            "description": "Tile coordinate in format z/x/y (e.g., '6/34/22')",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tile deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "tile": { "type": "string" },
+                    "directory": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tile parameter"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Failed to delete"
+          }
+        }
+      }
+    },
+    "/pmtiles/status": {
+      "get": {
+        "tags": ["PMTiles Management"],
+        "summary": "Get download status",
+        "description": "Polling endpoint for download progress",
+        "responses": {
+          "200": {
+            "description": "Download status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "active": { "type": "boolean" },
+                    "total": { "type": "integer" },
+                    "done": { "type": "integer" },
+                    "progress": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
             }
           }
         }
       }
+    },
+    "/pmtiles/cancel": {
+      "post": {
+        "tags": ["PMTiles Management"],
+        "summary": "Cancel all downloads",
+        "description": "Cancels all active downloads",
+        "responses": {
+          "200": {
+            "description": "Downloads cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/styles/{name}.json": {
+      "get": {
+        "tags": ["Styles"],
+        "summary": "Get MapLibre GL style",
+        "description": "Returns a MapLibre GL style JSON with host placeholders replaced",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Style name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MapLibre GL style JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Style not found"
+          }
+        }
+      }
+    },
+    "/sprites/{name}.json": {
+      "get": {
+        "tags": ["Sprites"],
+        "summary": "Get sprite metadata",
+        "description": "Returns sprite sheet metadata JSON",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Sprite name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sprite metadata JSON",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Sprite not found"
+          }
+        }
+      }
+    },
+    "/sprites/{name}.png": {
+      "get": {
+        "tags": ["Sprites"],
+        "summary": "Get sprite image",
+        "description": "Returns sprite sheet PNG image",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Sprite name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sprite PNG image",
+            "content": {
+              "image/png": {}
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Sprite not found"
+          }
+        }
+      }
+    },
+    "/sprites/{name}@2x.json": {
+      "get": {
+        "tags": ["Sprites"],
+        "summary": "Get high-resolution sprite metadata",
+        "description": "Returns 2x resolution sprite sheet metadata JSON",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Sprite name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sprite metadata JSON",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Sprite not found"
+          }
+        }
+      }
+    },
+    "/sprites/{name}@2x.png": {
+      "get": {
+        "tags": ["Sprites"],
+        "summary": "Get high-resolution sprite image",
+        "description": "Returns 2x resolution sprite sheet PNG image",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Sprite name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sprite PNG image",
+            "content": {
+              "image/png": {}
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Sprite not found"
+          }
+        }
+      }
+    },
+    "/glyphs/{fontstack}/{range}.pbf": {
+      "get": {
+        "tags": ["Glyphs"],
+        "summary": "Get font glyphs",
+        "description": "Returns font glyph PBF for specified fontstack and unicode range",
+        "parameters": [
+          {
+            "name": "fontstack",
+            "in": "path",
+            "required": true,
+            "description": "Comma-separated list of font names",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "path",
+            "required": true,
+            "description": "Unicode range (e.g., '0-255', '256-511')",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+-\\d+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Font glyph PBF",
+            "content": {
+              "application/x-protobuf": {}
+            }
+          },
+          "400": {
+            "description": "Invalid range format"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Glyph not found"
+          }
+        }
+      }
+    },
+    "/contours/{name}.json": {
+      "get": {
+        "tags": ["Contours"],
+        "summary": "Get contour lines TileJSON metadata",
+        "description": "Returns TileJSON metadata for dynamically generated contour lines from DEM tiles",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name (mapterhorn, gebco, emod)",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TileJSON metadata with vector layer info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tilejson": { "type": "string" },
+                    "name": { "type": "string" },
+                    "format": { "type": "string" },
+                    "vector_layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "fields": {
+                            "type": "object",
+                            "properties": {
+                              "elevation": { "type": "string" },
+                              "level": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found"
+          }
+        }
+      }
+    },
+    "/contours/{name}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": ["Contours"],
+        "summary": "Get contour lines tile",
+        "description": "Generates and delivers contour lines as vector tile (MVT/PBF) from DEM data with dynamic intervals based on zoom level",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 14
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile X coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile Y coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contour lines vector tile",
+            "content": {
+              "application/x-protobuf": {}
+            }
+          },
+          "204": {
+            "description": "No tile available"
+          },
+          "400": {
+            "description": "Invalid tile coordinates"
+          }
+        }
+      }
+    },
+    "/bathymetry/{name}.json": {
+      "get": {
+        "tags": ["Bathymetry"],
+        "summary": "Get bathymetry TileJSON metadata",
+        "description": "Returns TileJSON metadata for bathymetry depth contours",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name (mapterhorn, gebco, emod)",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TileJSON metadata with vector layer info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tilejson": { "type": "string" },
+                    "name": { "type": "string" },
+                    "format": { "type": "string" },
+                    "vector_layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "fields": {
+                            "type": "object",
+                            "properties": {
+                              "elevation": { "type": "string" },
+                              "depth": { "type": "string" },
+                              "level": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found"
+          }
+        }
+      }
+    },
+    "/bathymetry/{name}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": ["Bathymetry"],
+        "summary": "Get bathymetry depth contours tile",
+        "description": "Generates and delivers bathymetry depth contours as vector tile (MVT/PBF) with configurable depth levels",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile X coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile Y coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bathymetry vector tile",
+            "content": {
+              "application/x-protobuf": {}
+            }
+          },
+          "204": {
+            "description": "No tile available"
+          },
+          "400": {
+            "description": "Invalid tile coordinates"
+          }
+        }
+      }
+    },
+    "/soundings/{name}.json": {
+      "get": {
+        "tags": ["Soundings"],
+        "summary": "Get soundings TileJSON metadata",
+        "description": "Returns TileJSON metadata for spot soundings (depth measurements)",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name (mapterhorn, gebco, emod)",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TileJSON metadata with vector layer info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tilejson": { "type": "string" },
+                    "name": { "type": "string" },
+                    "format": { "type": "string" },
+                    "vector_layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "fields": {
+                            "type": "object",
+                            "properties": {
+                              "depth": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found"
+          }
+        }
+      }
+    },
+    "/soundings/{name}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": ["Soundings"],
+        "summary": "Get soundings tile",
+        "description": "Generates and delivers spot soundings (depth point measurements) as vector tile (MVT/PBF) with jittered grid distribution",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "DEM source name",
+            "schema": {
+              "type": "string",
+              "enum": ["mapterhorn", "gebco", "emod"]
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile X coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile Y coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soundings vector tile with point features",
+            "content": {
+              "application/x-protobuf": {}
+            }
+          },
+          "204": {
+            "description": "No tile available"
+          },
+          "400": {
+            "description": "Invalid tile coordinates"
+          }
+        }
+      }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Tiles",
+      "description": "Base map tile serving with multi-strategy fallback"
+    },
+    {
+      "name": "PMTiles Management",
+      "description": "Download and manage offline PMTiles sectors"
+    },
+    {
+      "name": "Styles",
+      "description": "MapLibre GL style serving"
+    },
+    {
+      "name": "Sprites",
+      "description": "Map sprite sheet serving"
+    },
+    {
+      "name": "Glyphs",
+      "description": "Font glyph serving for map labels"
+    },
+    {
+      "name": "Contours",
+      "description": "Dynamic contour line generation from DEM data"
+    },
+    {
+      "name": "Bathymetry",
+      "description": "Bathymetry depth contour generation"
+    },
+    {
+      "name": "Soundings",
+      "description": "Spot depth sounding generation"
+    }
+  ]
 }
