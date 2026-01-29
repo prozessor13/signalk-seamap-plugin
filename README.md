@@ -89,10 +89,19 @@ pmtiles --version
 
 ### Plugin Installation
 
-Install via SignalK App Store or manually:
+**Option 1: Via npm (Recommended)**
+```bash
+cd ~/.signalk
+npm install signalk-seamap-plugin
+```
+
+**Option 2: Via SignalK App Store**
+Search for "Seamap Charts" in the SignalK plugin manager.
+
+**Option 3: Manual Installation**
 ```bash
 cd ~/.signalk/node_modules
-git clone https://github.com/yourusername/signalk-seamap-plugin.git
+git clone https://github.com/maptoolkit/signalk-seamap-plugin.git
 cd signalk-seamap-plugin
 npm install
 ```

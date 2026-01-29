@@ -1,21 +1,45 @@
 {
   "name": "signalk-seamap-plugin",
-  "version": "1.0.0",
-  "description": "Global Seacharts based on OSM/Gebco/Emod for SignalK",
+  "version": "0.1.0",
+  "description": "Global Seacharts based on OSM/Gebco/Emod for SignalK for online and offline usage",
   "keywords": [
     "signalk-node-server-plugin",
-    "signalk-webapp"
+    "signalk-webapp",
+    "maps",
+    "charts",
+    "nautical",
+    "offline-maps",
+    "pmtiles"
   ],
+  "author": "Max Demmelbauer",
   "signalk-plugin-enabled-by-default": false,
   "signalk": {
     "displayName": "Seamap Charts"
   },
   "main": "index.js",
+  "files": [
+    "index.js",
+    "openApi.json",
+    "src/",
+    "public/",
+    "styles/",
+    "sprites/",
+    "glyphs/",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/maptoolkit/signalk-seamap-plugin"
+    "url": "https://github.com/prozessor13/signalk-seamap-plugin"
   },
+  "bugs": {
+    "url": "https://github.com/prozessor13/signalk-seamap-plugin/issues"
+  },
+  "homepage": "https://github.com/prozessor13/signalk-seamap-plugin",
   "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
     "pbf": "^4.0.1",
     "pmtiles": "^3.0.0",
