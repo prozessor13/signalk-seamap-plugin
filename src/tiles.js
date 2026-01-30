@@ -298,7 +298,7 @@ class Tiles {
       version: '1.0.0',
       attribution: source.attribution || '',
       scheme: 'xyz',
-      tiles: [`${req.protocol}://${req.get('host')}/plugins/signalk-seamap-plugin/tiles/${name}/{z}/{x}/{y}.${source.format}`],
+      tiles: [`/plugins/signalk-seamap-plugin/tiles/${name}/{z}/{x}/{y}.${source.format}`],
       encoding: source.encoding,
       tileSize: source.tileSize,
       minzoom: source.minzoom,
