@@ -613,7 +613,6 @@
                 // If download finished, reload page to show new tiles
                 if (!status.active && status.done >= status.total && status.total > 0) {
                     stopPolling();
-                    setTimeout(() => window.location.reload(), 1000);
                 }
             } catch (err) {
                 console.error('Failed to poll status:', err);
@@ -633,6 +632,7 @@
             if (pollInterval) {
                 clearInterval(pollInterval);
                 pollInterval = null;
+                setTimeout(() => window.location.reload(), 100);
             }
         }
 
@@ -641,7 +641,6 @@
             try {
                 await fetch(`${API_BASE}/pmtiles/cancel`, { method: 'POST' });
                 stopPolling();
-                window.location.reload();
             } catch (err) {
                 console.error('Failed to cancel:', err);
             }

@@ -7,42 +7,42 @@
     "sprite": [
         {
             "id": "basics",
-            "url": "{SEAMAP_HOST}/sprites/versatiles"
+            "url": "/plugins/signalk-seamap-plugin/sprites/versatiles"
         },
         {
             "id": "seamap",
-            "url": "{SEAMAP_HOST}/sprites/seamap"
+            "url": "/plugins/signalk-seamap-plugin/sprites/seamap"
         }
     ],
-    "glyphs": "{SEAMAP_HOST}/glyphs/{fontstack}/{range}.pbf",
+    "glyphs": "/plugins/signalk-seamap-plugin/glyphs/{fontstack}/{range}.pbf",
     "sources": {
         "osm": {
             "type": "vector",
-            "url": "{SEAMAP_HOST}/tiles/osm.json"
+            "url": "/plugins/signalk-seamap-plugin/tiles/osm.json"
         },
         "seamap": {
             "type": "vector",
-            "url": "{SEAMAP_HOST}/tiles/seamap.json"
+            "url": "/plugins/signalk-seamap-plugin/tiles/seamap.json"
         },
         "mapterhorn": {
             "type": "raster-dem",
-            "url": "{SEAMAP_HOST}/tiles/mapterhorn.json"
+            "url": "/plugins/signalk-seamap-plugin/tiles/mapterhorn.json"
         },
         "mapterhorn_contours": {
             "type": "vector",
-            "url": "{SEAMAP_HOST}/contours/mapterhorn.json"
+            "url": "/plugins/signalk-seamap-plugin/contours/mapterhorn.json"
         },
         "bathymetry": {
             "type": "raster-dem",
-            "url": "{SEAMAP_HOST}/tiles/emod.json"
+            "url": "/plugins/signalk-seamap-plugin/tiles/emod.json"
         },
         "bathymetry_contours": {
             "type": "vector",
-            "url": "{SEAMAP_HOST}/bathymetry/emod.json"
+            "url": "/plugins/signalk-seamap-plugin/bathymetry/emod.json"
         },
         "bathymetry_soundings": {
             "type": "vector",
-            "url": "{SEAMAP_HOST}/soundings/emod.json"
+            "url": "/plugins/signalk-seamap-plugin/soundings/emod.json"
         }
     },
     "layers": [

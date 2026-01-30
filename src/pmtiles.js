@@ -194,6 +194,7 @@ class Pmtiles {
   // Parse pmtiles progress output
   parseProgress(line) {
     const match = line.match(/([\d\.]+\s*(kB|MB)?\s*\/\s*([\d\.]+)\s*(kB|MB))/);
+    console.log(line, match);
     return match ? match[1] : null;
   }
 

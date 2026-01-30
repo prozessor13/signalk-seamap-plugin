@@ -22,16 +22,9 @@ class Styles {
         return res.status(404).send('Style not found');
       }
 
-      // Replace {SEAMAP_HOST} placeholder with actual host URL
-      const protocol = req.protocol;
-      const host = req.get('host');
-      const seamapHost = `${protocol}://${host}${req.baseUrl}`;
-
-      const style = data.replace(/\{SEAMAP_HOST\}/g, seamapHost);
-
       res.set('Content-Type', 'application/json');
       res.set('Cache-Control', 'public, max-age=3600');
-      res.send(style);
+      res.send(data);
     });
   }
 
