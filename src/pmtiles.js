@@ -199,7 +199,6 @@ class Pmtiles {
   // Parse pmtiles progress output
   parseProgress(line) {
     const match = line.match(/([\d\.]+\s*(kB|MB)?\s*\/\s*([\d\.]+)\s*(kB|MB))/);
-    console.log(line, match);
     return match ? match[1] : null;
   }
 
@@ -319,9 +318,15 @@ class Pmtiles {
 
         const proc = spawn(pmtilesPath, args);
         state.process = proc;
+        state.progress = [tile, source.name, null];
 
         proc.stderr.on('data', (data) => {
-          state.progress = [tile, source.name, this.parseProgress(data.toString())]
+          const progress = this.parseProgress(data.toString());
+          if (progress) state.progress[2] = progress;
+        });
+        proc.stdout.on('data', (data) => {
+          const progress = this.parseProgress(data.toString());
+          if (progress) state.progress[2] = progress;
         });
 
         proc.on('close', (code) => {
