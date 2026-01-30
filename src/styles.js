@@ -24,7 +24,10 @@ class Styles {
 
       res.set('Content-Type', 'application/json');
       res.set('Cache-Control', 'public, max-age=3600');
-      res.send(data);
+      res.send(data
+        .replaceAll('{BASE_URL}', req.query.base_url || '')
+        .replaceAll('{BASE_URL_ENCODED}', encodeURIComponent(req.query.base_url || ''))
+      );
     });
   }
 

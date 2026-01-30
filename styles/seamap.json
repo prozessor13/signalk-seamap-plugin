@@ -7,42 +7,42 @@
     "sprite": [
         {
             "id": "basics",
-            "url": "/plugins/signalk-seamap-plugin/sprites/versatiles"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/sprites/versatiles"
         },
         {
             "id": "seamap",
-            "url": "/plugins/signalk-seamap-plugin/sprites/seamap"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/sprites/seamap"
         }
     ],
-    "glyphs": "/plugins/signalk-seamap-plugin/glyphs/{fontstack}/{range}.pbf",
+    "glyphs": "{BASE_URL}/plugins/signalk-seamap-plugin/glyphs/{fontstack}/{range}.pbf",
     "sources": {
         "osm": {
             "type": "vector",
-            "url": "/plugins/signalk-seamap-plugin/tiles/osm.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/osm.json?base_url={BASE_URL_ENCODED}"
         },
         "seamap": {
             "type": "vector",
-            "url": "/plugins/signalk-seamap-plugin/tiles/seamap.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/seamap.json?base_url={BASE_URL_ENCODED}"
         },
         "mapterhorn": {
             "type": "raster-dem",
-            "url": "/plugins/signalk-seamap-plugin/tiles/mapterhorn.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/mapterhorn.json?base_url={BASE_URL_ENCODED}"
         },
         "mapterhorn_contours": {
             "type": "vector",
-            "url": "/plugins/signalk-seamap-plugin/contours/mapterhorn.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/contours/mapterhorn.json?base_url={BASE_URL_ENCODED}"
         },
         "bathymetry": {
             "type": "raster-dem",
-            "url": "/plugins/signalk-seamap-plugin/tiles/emod.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/emod.json?base_url={BASE_URL_ENCODED}"
         },
         "bathymetry_contours": {
             "type": "vector",
-            "url": "/plugins/signalk-seamap-plugin/bathymetry/emod.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/bathymetry/emod.json?base_url={BASE_URL_ENCODED}"
         },
         "bathymetry_soundings": {
             "type": "vector",
-            "url": "/plugins/signalk-seamap-plugin/soundings/emod.json"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/soundings/emod.json?base_url={BASE_URL_ENCODED}"
         }
     },
     "layers": [
@@ -1443,8 +1443,11 @@
                     8,
                     16,
                     10
+                ],
+                "text-font": [
+                    "Noto Sans Regular"
                 ]
-            },
+        },
             "paint": {
                 "text-color": [
                     "case",
@@ -1494,6 +1497,9 @@
                 "text-field": [
                     "get",
                     "name"
+                ],
+                "text-font": [
+                    "Noto Sans Regular"
                 ],
                 "text-size": [
                     "interpolate",

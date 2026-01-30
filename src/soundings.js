@@ -143,7 +143,7 @@ class Soundings {
       version: '1.0.0',
       attribution: source.attribution || '',
       scheme: 'xyz',
-      tiles: [`/plugins/signalk-seamap-plugin/soundings/${name}/{z}/{x}/{y}.pbf`],
+      tiles: [`${req.query.base_url || ''}/plugins/signalk-seamap-plugin/soundings/${name}/{z}/{x}/{y}.pbf`],
       minzoom: source.minzoom + 1, // because of overzoom=1
       maxzoom: 14,
       bounds: [-180, -85, 180, 85],
