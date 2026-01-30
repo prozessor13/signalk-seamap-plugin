@@ -1,7 +1,7 @@
 {
   "name": "signalk-seamap-plugin",
   "version": "0.1.1",
-  "description": "Global Seacharts based on OSM/Gebco/Emod for SignalK for online and offline usage",
+  "description": "Global Seacharts based on OSM/Gebco/Emod for online and offline usage",
   "keywords": [
     "signalk-node-server-plugin",
     "signalk-webapp",
@@ -14,7 +14,8 @@
   "author": "Max Demmelbauer",
   "signalk-plugin-enabled-by-default": false,
   "signalk": {
-    "displayName": "Seamap Charts"
+    "displayName": "Seamap",
+    "appIcon": "icon.png"
   },
   "main": "index.js",
   "files": [
