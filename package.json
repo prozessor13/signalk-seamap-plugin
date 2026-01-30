@@ -1,6 +1,6 @@
 {
   "name": "signalk-seamap-plugin",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Global Seacharts based on OSM/Gebco/Emod for online and offline usage",
   "keywords": [
     "signalk-node-server-plugin",
