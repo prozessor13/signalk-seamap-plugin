@@ -84,11 +84,16 @@ class Pmtiles {
 
   // Check if pmtiles CLI is installed
   checkPmtiles(callback) {
-    exec('which pmtiles', (err, stdout) => {
+    // Use 'where' on Windows, 'which' on Unix-like systems
+    const command = process.platform === 'win32' ? 'where pmtiles' : 'which pmtiles';
+
+    exec(command, (err, stdout) => {
       if (err || !stdout.trim()) {
         callback(false, null);
       } else {
-        callback(true, stdout.trim());
+        // On Windows, 'where' can return multiple paths, use the first one
+        const pmtilesPath = stdout.trim().split('\n')[0].trim();
+        callback(true, pmtilesPath);
       }
     });
   }

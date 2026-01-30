@@ -157,16 +157,8 @@
     </div>
 
     <script>
-        // Get plugin base URL
-        const path = window.location.pathname;
-        const pluginBase = '/plugins' + path.substring(0, path.lastIndexOf('/'));
-        const styleUrl = `${pluginBase}/styles/seamap.json`;
-
         // SignalK configuration
-        const SIGNALK = {
-            url: 'http://localhost:3000',
-            ws: null,
-        };
+        const SIGNALK = { ws: null };
 
         // Helper functions
         const rad2deg = r => (r * 180 / Math.PI + 360) % 360;
@@ -190,10 +182,31 @@
         // Initialize map with plugin stylesheet
         const map = new maplibregl.Map({
             container: 'map',
-            style: styleUrl,
-            center: [14.71, 52.84],
-            zoom: 8,
-            hash: true
+            hash: true,
+            center: [6.3, 46.2],
+            zoom: 4
+        });
+        map.setStyle('/plugins/signalk-seamap-plugin/styles/seamap.json', {
+            transformStyle: (previousStyle, style) => {
+                if (style.sprite) {
+                    // Handle array of sprites
+                    if (Array.isArray(style.sprite)) {
+                        style.sprite = style.sprite.map(spriteItem => {
+                            if (typeof spriteItem === 'object' && spriteItem.url && !spriteItem.url.startsWith('http')) {
+                                return { ...spriteItem, url: window.location.origin + spriteItem.url };
+                            } else if (typeof spriteItem === 'string' && !spriteItem.startsWith('http')) {
+                                return window.location.origin + spriteItem;
+                            }
+                            return spriteItem;
+                        });
+                    }
+                    // Handle single sprite string
+                    else if (typeof style.sprite === 'string' && !style.sprite.startsWith('http')) {
+                        style.sprite = window.location.origin + style.sprite;
+                    }
+                }
+                return style;
+            }
         });
 
         // Add controls
@@ -262,7 +275,7 @@
         // WebSocket connection
         function connectWS() {
             try {
-                SIGNALK.ws = new WebSocket(SIGNALK.url.replace(/^http/, 'ws') + '/signalk/v1/stream?subscribe=self');
+                SIGNALK.ws = new WebSocket('/signalk/v1/stream?subscribe=self');
                 SIGNALK.ws.onmessage = (ev) => handleDelta(JSON.parse(ev.data));
                 SIGNALK.ws.onerror = () => SIGNALK.ws.close();
                 SIGNALK.ws.onclose = () => setTimeout(() => connectWS(), 5000);
