@@ -42,7 +42,7 @@ module.exports = function(app) {
           type: 'string',
           title: 'Bathymety contour lines',
           description: 'comma separated string with all depth levels for bathymetry contourlines',
-          default: '2,5,10,20,50'
+          default: '0,2,5,10,20,50'
         },
       }
     }),

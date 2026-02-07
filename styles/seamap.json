@@ -34,15 +34,15 @@
         },
         "bathymetry": {
             "type": "raster-dem",
-            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/emod.json?base_url={BASE_URL_ENCODED}"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/{BATHYMETRY}.json?base_url={BASE_URL_ENCODED}"
         },
         "bathymetry_contours": {
             "type": "vector",
-            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/bathymetry/emod.json?base_url={BASE_URL_ENCODED}"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/bathymetry/{BATHYMETRY}.json?base_url={BASE_URL_ENCODED}"
         },
         "bathymetry_soundings": {
             "type": "vector",
-            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/soundings/emod.json?base_url={BASE_URL_ENCODED}"
+            "url": "{BASE_URL}/plugins/signalk-seamap-plugin/soundings/{BATHYMETRY}.json?base_url={BASE_URL_ENCODED}"
         }
     },
     "layers": [
@@ -54,22 +54,29 @@
             }
         },
         {
-            "id": "bathymetry_relief",
-            "type": "color-relief",
-            "source": "bathymetry",
+            "id": "bathymetry_fill",
+            "type": "fill",
+            "source": "bathymetry_contours",
+            "source-layer": "bathymetry",
+            "minzoom": 5,
+            "filter": [
+                "<=",
+                ["get", "depthUpper"],
+                50
+            ],
             "paint": {
-                "color-relief-color": [
+                "fill-color": [
                     "interpolate",
                     ["linear"],
-                    ["elevation"],
-                    -10000, "#bae7fe", -50.1, "#e9f7ff",
-                    -50, "#bae7fe", -20.1, "#bae7fe",
-                    -20, "#9adcfe", -10.1, "#9adcfe",
-                    -10, "#83d4fe", -5.1, "#83d4fe",
-                    -5, "#73cefe", -2.1, "#73cefe",
-                    -2, "#68cafe", -0.01, "#68cafe",
-                    0, "#cadbc1"
-                ]
+                    ["get", "depth"],
+                    0, "#e9f7ff",
+                    2, "#d4f1f9",
+                    5, "#bae7fe",
+                    10, "#9adcfe",
+                    20, "#83d4fe",
+                    50, "#73cefe"
+                ],
+                "fill-opacity": 0.6
             }
         },
         {
@@ -161,39 +168,71 @@
             }
         },
         {
-            "id": "bathymetry_contours",
+            "id": "bathymetry_contours_shallow",
             "type": "line",
             "source": "bathymetry_contours",
-            "source-layer": "bathymetry",
+            "source-layer": "bathymetry-labels",
             "minzoom": 5,
+            "filter": [
+                "<=",
+                ["get", "depth"],
+                50
+            ],
             "paint": {
-                "line-color": "#777",
-                "line-width": 0.5,
+                "line-color": "#5a9cb8",
+                "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    5, 0.3,
+                    12, 0.8
+                ],
                 "line-opacity": 0.5
+            }
+        },
+        {
+            "id": "bathymetry_contours_deep",
+            "type": "line",
+            "source": "bathymetry_contours",
+            "source-layer": "bathymetry-labels",
+            "minzoom": 5,
+            "filter": [
+                ">",
+                ["get", "depth"],
+                50
+            ],
+            "paint": {
+                "line-color": "#4a7a8f",
+                "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    5, 0.5,
+                    12, 1.0
+                ],
+                "line-opacity": 0.6
             }
         },
         {
             "id": "bathymetry_contours_label",
             "type": "symbol",
             "source": "bathymetry_contours",
-            "source-layer": "bathymetry",
+            "source-layer": "bathymetry-labels",
             "minzoom": 8,
             "maxzoom": 22,
             "layout": {
                 "symbol-placement": "line",
                 "symbol-spacing": 200,
                 "text-field": [
-                    "to-string",
+                    "concat",
                     [
-                        "round",
+                        "to-string",
                         [
-                            "abs",
-                            [
-                                "get",
-                                "elevation"
-                            ]
+                            "get",
+                            "depth"
                         ]
-                    ]
+                    ],
+                    "m"
                 ],
                 "text-font": [
                     "Noto Sans Regular"
@@ -221,7 +260,9 @@
                 ]
             },
             "paint": {
-                "text-color": "#777"
+                "text-color": "#4a7a8f",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1
             }
         },
         {

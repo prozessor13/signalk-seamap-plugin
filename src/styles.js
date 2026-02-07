@@ -16,7 +16,6 @@ class Styles {
     if (!resolvedPath.startsWith(path.resolve(STYLES_DIR))) {
       return res.status(403).send('Forbidden');
     }
-
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) {
         return res.status(404).send('Style not found');
@@ -27,6 +26,7 @@ class Styles {
       res.send(data
         .replaceAll('{BASE_URL}', req.query.base_url || '')
         .replaceAll('{BASE_URL_ENCODED}', encodeURIComponent(req.query.base_url || ''))
+        .replaceAll('{BATHYMETRY}', req.query.bathymetry || 'gebco')
       );
     });
   }

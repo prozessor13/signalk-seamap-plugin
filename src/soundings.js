@@ -172,7 +172,6 @@ class Soundings {
     let tile = this.contours.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
     let source = this.contours.tiles.getTile(name, zNum, xNum, yNum);
 
-    tile = null;
     let tileData = null
     if (!tile || source?.timestamp > tile.timestamp) {
       // Generate tile
