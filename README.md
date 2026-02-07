@@ -2,6 +2,8 @@
 
 Global sea charts based on OSM/Gebco/Emod for SignalK with online and offline capabilities.
 
+**Note: This plugin is a work in progress — help and feedback are highly appreciated!**
+
 ## Overview
 
 This plugin provides offline-first map tile serving for SignalK with intelligent fallback strategies. It supports both vector tiles (MVT/PBF) and raster tiles (PNG/JPEG/WebP) from multiple sources. This project is in alpha stage but should be functional.
