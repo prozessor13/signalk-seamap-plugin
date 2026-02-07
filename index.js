@@ -4,6 +4,7 @@ const Styles = require('./src/styles');
 const Pmtiles = require('./src/pmtiles');
 const Tiles = require('./src/tiles');
 const Contours = require('./src/contours');
+const Bathymetry = require('./src/bathymetry');
 const Soundings = require('./src/soundings');
 
 module.exports = function(app) {
@@ -14,6 +15,7 @@ module.exports = function(app) {
   const pmtiles = new Pmtiles(seamap);
   const tiles = new Tiles(seamap, pmtiles);
   const contours = new Contours(seamap, tiles);
+  const bathymetry = new Bathymetry(seamap, tiles);
   const soundings = new Soundings(seamap, contours);
 
   return {
@@ -61,6 +63,7 @@ module.exports = function(app) {
       pmtiles.middleware(router);
       tiles.middleware(router);
       contours.middleware(router);
+      bathymetry.middleware(router);
       soundings.middleware(router);
     },
     getOpenApi: () => require('./openApi'),

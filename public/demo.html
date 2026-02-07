@@ -179,13 +179,23 @@
             return `${h} ${d}°${m.toFixed(3)}′`;
         };
 
+        // Get query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const bathymetry = urlParams.get('bathymetry') || '';
+
+        // Build style URL with query parameters
+        let styleUrl = '/plugins/signalk-seamap-plugin/styles/seamap.json?base_url=' + window.location.origin;
+        if (bathymetry) {
+            styleUrl += '&bathymetry=' + encodeURIComponent(bathymetry);
+        }
+
         // Initialize map with plugin stylesheet
         const map = new maplibregl.Map({
             container: 'map',
             hash: true,
             center: [6.3, 46.2],
             zoom: 4,
-            style: '/plugins/signalk-seamap-plugin/styles/seamap.json?base_url=' + window.location.origin
+            style: styleUrl
         });
 
         // Add controls

@@ -31,7 +31,7 @@ function generateIsobands(
   levels,
   tile,
   extent = 4096,
-  _buffer = 1,
+  buffer = 1,
 ) {
   // Handle string input (from URL encoding) by parsing as array
   let levelArray;
@@ -54,15 +54,17 @@ function generateIsobands(
   const sortedLevels = [...levelArray].sort((a, b) => a - b);
 
   // Convert HeightTile to 2D array for marching-squares
+  // Include buffer area to extend polygons beyond tile boundaries
   const width = tile.width;
   const height = tile.height;
   const data = [];
 
-  for (let y = 0; y < height; y++) {
-    data[y] = [];
-    for (let x = 0; x < width; x++) {
-      data[y][x] = tile.get(x, y);
+  for (let y = -buffer; y < height + buffer; y++) {
+    const row = [];
+    for (let x = -buffer; x < width + buffer; x++) {
+      row.push(tile.get(x, y));
     }
+    data.push(row);
   }
 
   // Generate iso bands for each range between consecutive levels
@@ -89,13 +91,16 @@ function generateIsobands(
 
       if (bands.length > 0 && bands[0].length > 0) {
         for (const path of bands[0]) {
-          // path is an array of [x, y] coordinates
-          // Convert to flat array and scale to extent
+          // path is an array of [x, y] coordinates in buffered space
+          // Convert to flat array and scale to extent, accounting for buffer offset
           const polygon = [];
           const scale = extent / (width - 1);
 
           for (const [x, y] of path) {
-            polygon.push(Math.round(x * scale), Math.round(y * scale));
+            // Subtract buffer offset before scaling to tile coordinates
+            const tileX = (x - buffer) * scale;
+            const tileY = (y - buffer) * scale;
+            polygon.push(Math.round(tileX), Math.round(tileY));
           }
 
           if (polygon.length >= 6) {

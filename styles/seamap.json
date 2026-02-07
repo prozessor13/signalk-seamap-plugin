@@ -69,12 +69,12 @@
                     "interpolate",
                     ["linear"],
                     ["get", "depth"],
-                    0, "#e9f7ff",
-                    2, "#d4f1f9",
-                    5, "#bae7fe",
-                    10, "#9adcfe",
-                    20, "#83d4fe",
-                    50, "#73cefe"
+                    0, "#73cefe",
+                    2, "#83d4fe",
+                    5, "#9adcfe",
+                    10, "#bae7fe",
+                    20, "#d4f1f9",
+                    50, "#e9f7ff"
                 ],
                 "fill-opacity": 0.6
             }
