@@ -72,7 +72,7 @@ function generateIsobands(
     const lowerLevel = sortedLevels[i];
     const upperLevel = sortedLevels[i + 1];
     // Use colon separator to avoid issues with negative values
-    const rangeKey = `${lowerLevel}:${upperLevel}`;
+    const rangeKey = `${lowerLevel}:${upperLevel}:${sortedLevels.length - i - 2}`;
 
     try {
       // Use marching-squares to generate bands

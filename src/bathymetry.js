@@ -14,6 +14,45 @@ class Bathymetry extends Contours {
   }
 
   /**
+   * Split a polygon ring at tile boundaries (0 and extent)
+   * Returns an array of line segments that are within the tile bounds
+   * @param {number[]} ring - Flat array of coordinates [x1, y1, x2, y2, ...]
+   * @param {number} extent - Tile extent (typically 4096)
+   * @returns {number[][]} Array of line segments
+   */
+  splitRingAtTileBounds(ring, extent) {
+    const segments = [];
+    let currentSegment = [];
+
+    for (let i = 0; i < ring.length; i += 2) {
+      const x = ring[i];
+      const y = ring[i + 1];
+
+      // Check if point is within tile bounds
+      const isInside = x >= 0 && x <= extent && y >= 0 && y <= extent;
+
+      if (isInside) {
+        // Point is inside, add to current segment
+        currentSegment.push(x, y);
+      } else {
+        // Point is outside tile bounds
+        if (currentSegment.length > 0) {
+          // We were building a segment, close it and start a new one
+          segments.push(currentSegment);
+          currentSegment = [];
+        }
+      }
+    }
+
+    // Add last segment if it has points
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment);
+    }
+
+    return segments;
+  }
+
+  /**
    * Get bathymetry depth levels from config
    */
   getBathymetryDepthLevels() {
@@ -38,13 +77,20 @@ class Bathymetry extends Contours {
     const depthLevels = this.getBathymetryDepthLevels();
     // Convert to negative elevations (below sea level)
     const elevations = depthLevels.map(depth => -Math.abs(depth));
-    return this.generateIsobandsTile(name, z, x, y, overzoom, 'bathymetry', elevations);
+
+    // Add levels for shallow areas:
+    // - Add level for dry/land areas (above 0m): use a high positive value (100m)
+    // - Add 0m level to create polygon from 0 to first depth level
+    // Result: [100, 0, -2, -5, -10, ...] creates ranges: 0-100m (land), -2-0m (shallow), -5--2m, etc.
+    const extendedElevations = [10000, 0, ...elevations.sort((a, b) => b - a)];
+
+    return this.generateTile(name, z, x, y, overzoom, extendedElevations);
   }
 
   /**
    * Generate isobands tile (filled polygons between elevation levels)
    */
-  async generateIsobandsTile(name, z, x, y, overzoom, layerName, levels) {
+  async generateTile(name, z, x, y, overzoom, levels) {
     let heightTile = await this.loadHeightTileWithNeighbors(name, z, x, y, overzoom);
 
     if (!heightTile) {
@@ -74,92 +120,66 @@ class Bathymetry extends Contours {
     // Scaling factor to convert tile coordinates back to heightTile coordinates
     const tileToHeightScale = (heightTile.width - 1) / 4096;
 
-    // Track processed lines to avoid duplicates
-    const processedLines = new Set();
-
     for (const [rangeKey, polygons] of Object.entries(allIsobandRanges)) {
-      // rangeKey format: "lower:upper" (e.g., "-10:-5")
-      const [lowerStr, upperStr] = rangeKey.split(':');
+      // rangeKey format: "lower:upper:level" (e.g., "-10:-5:2")
+      const [lowerStr, upperStr, level] = rangeKey.split(':');
       const lower = parseFloat(lowerStr);
       const upper = parseFloat(upperStr);
-
-      const properties = {
-        lower: lower,
-        upper: upper,
-        depthLower: Math.abs(upper), // upper is less negative (shallower)
-        depthUpper: Math.abs(lower), // lower is more negative (deeper)
-        depth: Math.abs((lower + upper) / 2), // average depth
-        level: Math.round(Math.abs((lower + upper) / 2))
-      };
 
       polygonFeatures.push({
         type: GeomType.POLYGON,
         geometry: polygons, // Array of polygons
-        properties
+        properties: {
+          depth_min: Math.abs(upper), // upper is less negative (shallower)
+          depth_max: Math.abs(lower), // lower is more negative (deeper)
+          level: parseInt(level)
+        }
       });
 
-      // Extract all rings from this band and determine which boundary they represent
+      // Extract all rings from this band and split at tile boundaries
       for (const polygon of polygons) {
-        const lineKey = polygon.join(',');
+        // Split ring at tile extent (0-4096) to get segments within the tile
+        const segments = this.splitRingAtTileBounds(polygon, 4096);
 
-        // Skip if we've already processed this line
-        if (processedLines.has(lineKey)) {
-          continue;
-        }
-        processedLines.add(lineKey);
+        for (const segment of segments) {
+          // Segment too small (need at least 2 points)
+          if (segment.length < 4) continue;
 
-        // Sample a point on the ring to determine its elevation
-        // Use the first point (could also use middle point)
-        const sampleX = Math.round(polygon[0] * tileToHeightScale);
-        const sampleY = Math.round(polygon[1] * tileToHeightScale);
-        const sampledElevation = heightTile.get(sampleX, sampleY);
+          // Sample the first point of the segment to determine its elevation
+          const sampleX = Math.round(segment[0] * tileToHeightScale);
+          const sampleY = Math.round(segment[1] * tileToHeightScale);
 
-        // Determine which boundary this ring represents based on sampled elevation
-        // The ring is closer to whichever boundary (lower or upper) the sample is closer to
-        const distToLower = Math.abs(sampledElevation - lower);
-        const distToUpper = Math.abs(sampledElevation - upper);
-        const ringElevation = distToLower < distToUpper ? lower : upper;
+          // Clamp to valid heightTile bounds to avoid errors
+          const clampedX = Math.max(0, Math.min(heightTile.width - 1, sampleX));
+          const clampedY = Math.max(0, Math.min(heightTile.height - 1, sampleY));
+          const sampledElevation = heightTile.get(clampedX, clampedY);
+          if (isNaN(sampledElevation)) continue;
 
-        // Only create labels for deeper boundaries (exclude shallowest level)
-        const sortedLevels = [...levels].sort((a, b) => a - b);
-        const isDeepBoundary = ringElevation !== sortedLevels[sortedLevels.length - 1];
-
-        if (isDeepBoundary) {
-          const labelProperties = {
-            elevation: ringElevation,
-            depth: Math.abs(ringElevation),
-            level: Math.round(Math.abs(ringElevation))
-          };
-
-          lineFeatures.push({
-            type: GeomType.LINESTRING,
-            geometry: [polygon],
-            properties: labelProperties
-          });
+          // Only use segments that are on the deeper side (below the deeper boundary)
+          // If sampled elevation is closer to the deeper boundary, this segment represents it
+          const distToLower = Math.abs(sampledElevation - lower);
+          const distToUpper = Math.abs(sampledElevation - upper);
+          if (distToLower < distToUpper) {
+            lineFeatures.push({
+              type: GeomType.LINESTRING,
+              geometry: [segment],
+              properties: {
+                depth: Math.abs(lower),
+              }
+            });
+          }
         }
       }
     }
 
     // Encode to MVT/PBF with two layers: polygons and labels
-    const layers = {
-      [layerName]: {
-        features: polygonFeatures
-      }
-    };
-
-    // Add label layer if we have lines
-    if (lineFeatures.length > 0) {
-      layers[`${layerName}-labels`] = {
-        features: lineFeatures
-      };
-    }
-
-    const pbf = encodeVectorTile({
+    return Buffer.from(encodeVectorTile({
       extent: 4096,
-      layers
-    });
-
-    return Buffer.from(pbf);
+      layers: {
+        depth_areas: { features: polygonFeatures },
+        depth_contours: { features: lineFeatures }
+      }
+    }));
   }
 
   async deliverBathymetryTileJSON(req, res) {
@@ -188,24 +208,19 @@ class Bathymetry extends Contours {
       format: 'pbf',
       vector_layers: [
         {
-          id: 'bathymetry',
+          id: 'depth_areas',
           description: 'Filled polygons for depth ranges',
           fields: {
-            lower: 'Number',
-            upper: 'Number',
-            depthLower: 'Number',
-            depthUpper: 'Number',
-            depth: 'Number',
+            depth_min: 'Number',
+            depth_max: 'Number',
             level: 'Number'
           }
         },
         {
-          id: 'bathymetry-labels',
+          id: 'depth_contours',
           description: 'Contour lines for labeling the deeper boundaries',
           fields: {
-            elevation: 'Number',
-            depth: 'Number',
-            level: 'Number'
+            depth: 'Number'
           }
         }
       ]

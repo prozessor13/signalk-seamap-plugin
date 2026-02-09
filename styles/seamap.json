@@ -57,26 +57,30 @@
             "id": "bathymetry_fill",
             "type": "fill",
             "source": "bathymetry_contours",
-            "source-layer": "bathymetry",
+            "source-layer": "depth_areas",
             "minzoom": 5,
             "filter": [
                 "<=",
-                ["get", "depthUpper"],
+                [
+                    "get",
+                    "depth_max"
+                ],
                 50
             ],
             "paint": {
                 "fill-color": [
-                    "interpolate",
-                    ["linear"],
-                    ["get", "depth"],
-                    0, "#73cefe",
+                    "match",
+                    ["get", "level"],
+                    0, "#cadbc1",
+                    1, "#73cefe",
                     2, "#83d4fe",
-                    5, "#9adcfe",
-                    10, "#bae7fe",
-                    20, "#d4f1f9",
-                    50, "#e9f7ff"
+                    3, "#9adcfe",
+                    4, "#bae7fe",
+                    5, "#d4f1f9",
+                    6, "#e9f7ff",
+                    "#73cefe"
                 ],
-                "fill-opacity": 0.6
+                "fill-opacity": 1
             }
         },
         {
@@ -171,21 +175,30 @@
             "id": "bathymetry_contours_shallow",
             "type": "line",
             "source": "bathymetry_contours",
-            "source-layer": "bathymetry-labels",
+            "source-layer": "depth_contours",
             "minzoom": 5,
             "filter": [
                 "<=",
-                ["get", "depth"],
+                [
+                    "get",
+                    "depth"
+                ],
                 50
             ],
             "paint": {
                 "line-color": "#5a9cb8",
                 "line-width": [
                     "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    5, 0.3,
-                    12, 0.8
+                    [
+                        "linear"
+                    ],
+                    [
+                        "zoom"
+                    ],
+                    5,
+                    0.3,
+                    12,
+                    0.8
                 ],
                 "line-opacity": 0.5
             }
@@ -194,58 +207,19 @@
             "id": "bathymetry_contours_deep",
             "type": "line",
             "source": "bathymetry_contours",
-            "source-layer": "bathymetry-labels",
+            "source-layer": "depth_contours",
             "minzoom": 5,
             "filter": [
                 ">",
-                ["get", "depth"],
+                [
+                    "get",
+                    "depth"
+                ],
                 50
             ],
             "paint": {
                 "line-color": "#4a7a8f",
                 "line-width": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    5, 0.5,
-                    12, 1.0
-                ],
-                "line-opacity": 0.6
-            }
-        },
-        {
-            "id": "bathymetry_contours_label",
-            "type": "symbol",
-            "source": "bathymetry_contours",
-            "source-layer": "bathymetry-labels",
-            "minzoom": 8,
-            "maxzoom": 22,
-            "layout": {
-                "symbol-placement": "line",
-                "symbol-spacing": 200,
-                "text-field": [
-                    "concat",
-                    [
-                        "to-string",
-                        [
-                            "get",
-                            "depth"
-                        ]
-                    ],
-                    "m"
-                ],
-                "text-font": [
-                    "Noto Sans Regular"
-                ],
-                "text-letter-spacing": 0.1,
-                "text-line-height": 1.6,
-                "text-max-width": 5,
-                "text-offset": [
-                    0,
-                    -0.65
-                ],
-                "text-pitch-alignment": "viewport",
-                "text-size": [
                     "interpolate",
                     [
                         "linear"
@@ -253,16 +227,12 @@
                     [
                         "zoom"
                     ],
-                    8,
-                    8,
-                    13,
-                    10
-                ]
-            },
-            "paint": {
-                "text-color": "#4a7a8f",
-                "text-halo-color": "#ffffff",
-                "text-halo-width": 1
+                    5,
+                    0.5,
+                    12,
+                    1.0
+                ],
+                "line-opacity": 0.6
             }
         },
         {
@@ -392,6 +362,58 @@
             },
             "paint": {
                 "text-color": "#777"
+            }
+        },
+        {
+            "id": "bathymetry_contours_label",
+            "type": "symbol",
+            "source": "bathymetry_contours",
+            "source-layer": "depth_contours",
+            "minzoom": 8,
+            "maxzoom": 22,
+            "layout": {
+                "symbol-placement": "line",
+                "symbol-spacing": 200,
+                "text-field": [
+                    "concat",
+                    [
+                        "to-string",
+                        [
+                            "get",
+                            "depth"
+                        ]
+                    ],
+                    "m"
+                ],
+                "text-font": [
+                    "Noto Sans Regular"
+                ],
+                "text-letter-spacing": 0.1,
+                "text-line-height": 1.6,
+                "text-max-width": 5,
+                "text-offset": [
+                    0,
+                    -0.65
+                ],
+                "text-pitch-alignment": "viewport",
+                "text-size": [
+                    "interpolate",
+                    [
+                        "linear"
+                    ],
+                    [
+                        "zoom"
+                    ],
+                    8,
+                    8,
+                    13,
+                    10
+                ]
+            },
+            "paint": {
+                "text-color": "#4a7a8f",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1
             }
         },
         {
@@ -1488,7 +1510,7 @@
                 "text-font": [
                     "Noto Sans Regular"
                 ]
-        },
+            },
             "paint": {
                 "text-color": [
                     "case",
@@ -1861,86 +1883,6 @@
                         [
                             20,
                             20
-                        ]
-                    ]
-                }
-            }
-        },
-        {
-            "id": "water-area",
-            "type": "fill",
-            "source": "osm",
-            "source-layer": "water_polygons",
-            "filter": [
-                "==",
-                "kind",
-                "water"
-            ],
-            "paint": {
-                "fill-color": "hsl(205,48%,85%)",
-                "fill-opacity": {
-                    "stops": [
-                        [
-                            4,
-                            0
-                        ],
-                        [
-                            6,
-                            1
-                        ]
-                    ]
-                }
-            }
-        },
-        {
-            "id": "water-area-river",
-            "type": "fill",
-            "source": "osm",
-            "source-layer": "water_polygons",
-            "filter": [
-                "==",
-                "kind",
-                "river"
-            ],
-            "paint": {
-                "fill-color": "hsl(205,48%,85%)",
-                "fill-opacity": {
-                    "stops": [
-                        [
-                            4,
-                            0
-                        ],
-                        [
-                            6,
-                            1
-                        ]
-                    ]
-                }
-            }
-        },
-        {
-            "id": "water-area-small",
-            "type": "fill",
-            "source": "osm",
-            "source-layer": "water_polygons",
-            "filter": [
-                "in",
-                "kind",
-                "reservoir",
-                "basin",
-                "dock"
-            ],
-            "paint": {
-                "fill-color": "hsl(205,48%,85%)",
-                "fill-opacity": {
-                    "stops": [
-                        [
-                            4,
-                            0
-                        ],
-                        [
-                            6,
-                            1
                         ]
                     ]
                 }

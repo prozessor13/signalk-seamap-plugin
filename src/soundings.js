@@ -95,7 +95,7 @@ class Soundings {
         const elevation = heightTile.get(tileX, tileY);
 
         // Skip NaN or invalid values
-        if (!isNaN(elevation)) {
+        if (!isNaN(elevation) && elevation < 0) {
           const properties = {
             depth: Math.round(Math.abs(elevation) * 10) / 10
           };
