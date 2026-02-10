@@ -124,6 +124,46 @@ class Soundings {
     return Buffer.from(pbf);
   }
 
+  /**
+   * Get soundings tile (unified interface like tiles.getTile)
+   * Returns { timestamp, data: Buffer } or null
+   */
+  async getTile(name, z, x, y) {
+    const zNum = parseInt(z);
+    const xNum = parseInt(x);
+    const yNum = parseInt(y);
+
+    if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
+      return null;
+    }
+
+    // Check cache first
+    let cachedTile = this.contours.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
+    let sourceTile = await this.contours.tiles.getTile(name, zNum, xNum, yNum).catch(() => null);
+
+    // Regenerate if cache is missing or source is newer
+    if (!cachedTile || (sourceTile?.timestamp > cachedTile.timestamp)) {
+      const tileData = await this.generateSoundingsTile(name, zNum, xNum, yNum);
+
+      if (!tileData) {
+        return null;
+      }
+
+      // Save to cache
+      this.contours.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tileData);
+
+      return {
+        timestamp: Date.now(),
+        data: tileData
+      };
+    }
+
+    return {
+      timestamp: cachedTile.timestamp,
+      data: cachedTile.data()
+    };
+  }
+
   async deliverTileJSON(req, res) {
     const { name } = req.params;
 
@@ -160,36 +200,16 @@ class Soundings {
 
   async deliverTile(req, res) {
     const { name, z, x, y } = req.params;
-    const zNum = parseInt(z);
-    const xNum = parseInt(x);
-    const yNum = parseInt(y);
 
-    if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
-      return res.status(400).send('Invalid tile coordinates');
-    }
+    const tile = await this.getTile(name, z, x, y);
 
-    // Check cache first
-    let tile = this.contours.tiles.getCachedTile('soundings', name, zNum, xNum, yNum);
-    let source = this.contours.tiles.getTile(name, zNum, xNum, yNum);
-
-    let tileData = null
-    if (!tile || source?.timestamp > tile.timestamp) {
-      // Generate tile
-      tileData = await this.generateSoundingsTile(name, zNum, xNum, yNum);
-
-      if (!tileData) {
-        return res.status(204).send();
-      }
-
-      // Save to cache
-      this.contours.tiles.saveTileToCache('soundings', name, zNum, xNum, yNum, tileData);
-    } else {
-      tileData = tile.data();
+    if (!tile) {
+      return res.status(204).send();
     }
 
     res.set('Content-Type', 'application/x-protobuf');
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tileData);
+    res.send(tile.data);
   }
 
   middleware(router) {

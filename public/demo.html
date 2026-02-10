@@ -35,6 +35,41 @@
             background: #f8f8f8;
         }
 
+        /* Style Switcher */
+        .style-switcher {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .style-switcher button {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+            font-family: sans-serif;
+        }
+
+        .style-switcher button:hover {
+            background: #f0f0f0;
+        }
+
+        .style-switcher button.active {
+            background: #9b59b6;
+            color: white;
+        }
+
         /* HUD Styles */
         .ui {
             position: absolute;
@@ -127,6 +162,10 @@
 </head>
 <body>
     <a href="./" class="home-link">← Back to Downloader</a>
+    <div class="style-switcher">
+        <button id="style-seamap" class="active">Seamap</button>
+        <button id="style-slim">Slim</button>
+    </div>
     <div id="map"></div>
 
     <!-- HUD Overlay -->
@@ -220,6 +259,9 @@
 
         map.on('load', () => {
             console.log('Map loaded successfully');
+
+            // Setup style switcher
+            setupStyleSwitcher();
 
             // Add vessel source and layer
             map.addSource('vessel', {
@@ -368,6 +410,86 @@
                 map.userInteracted = true;
             }
         });
+
+        // Style switcher functionality
+        function setupStyleSwitcher() {
+            document.getElementById('style-seamap').addEventListener('click', () => {
+                switchStyle('seamap');
+            });
+
+            document.getElementById('style-slim').addEventListener('click', () => {
+                switchStyle('slim');
+            });
+        }
+
+        function switchStyle(styleName) {
+            let styleUrl = `/plugins/signalk-seamap-plugin/styles/${styleName}.json?base_url=${window.location.origin}`;
+            if (bathymetry) {
+                styleUrl += '&bathymetry=' + encodeURIComponent(bathymetry);
+            }
+
+            map.setStyle(styleUrl);
+
+            // Update active button
+            document.querySelectorAll('.style-switcher button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`style-${styleName}`).classList.add('active');
+
+            // Re-add vessel layers after style loads
+            map.once('styledata', () => {
+                // Re-add boat image
+                const boatImg2 = new Image(64, 64);
+                boatImg2.onload = () => {
+                    if (!map.hasImage('boat')) {
+                        map.addImage('boat', boatImg2, { pixelRatio: 2 });
+                    }
+
+                    // Re-add vessel source and layers
+                    if (!map.getSource('vessel')) {
+                        map.addSource('vessel', {
+                            type: 'geojson',
+                            data: { type: 'FeatureCollection', features: [] }
+                        });
+
+                        map.addLayer({
+                            id: 'vessel-layer',
+                            type: 'symbol',
+                            source: 'vessel',
+                            layout: {
+                                'icon-image': 'boat',
+                                'icon-size': 0.6,
+                                'icon-allow-overlap': true,
+                                'icon-rotate': ['get', 'heading'],
+                                'icon-rotation-alignment': 'map',
+                            }
+                        });
+                    }
+
+                    if (!map.getSource('heading-line')) {
+                        map.addSource('heading-line', {
+                            type: 'geojson',
+                            data: { type: 'FeatureCollection', features: [] }
+                        });
+
+                        map.addLayer({
+                            id: 'heading-line-layer',
+                            type: 'line',
+                            source: 'heading-line',
+                            paint: {
+                                'line-width': 3,
+                                'line-color': '#1f6feb',
+                                'line-opacity': 0.8
+                            }
+                        });
+                    }
+
+                    // Update map with current position
+                    updateMap();
+                };
+                boatImg2.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(boatSvg);
+            });
+        }
     </script>
 </body>
 </html>

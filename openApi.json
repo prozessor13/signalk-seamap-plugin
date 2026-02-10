@@ -863,6 +863,111 @@
           }
         }
       }
+    },
+    "/composite/{provider}.json": {
+      "get": {
+        "tags": ["Composite"],
+        "summary": "Get composite TileJSON metadata",
+        "description": "Returns TileJSON metadata for composite tiles combining OSM, Seamap, Contours, Bathymetry and Soundings",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "DEM provider name for bathymetry layers (gebco, emod, mapterhorn)",
+            "schema": {
+              "type": "string",
+              "enum": ["gebco", "emod", "mapterhorn"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TileJSON metadata for composite source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tilejson": { "type": "string" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "format": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Provider not found"
+          }
+        }
+      }
+    },
+    "/composite/{provider}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": ["Composite"],
+        "summary": "Get composite tile",
+        "description": "Delivers a composite vector tile combining OSM, Seamap, Contours, Bathymetry and Soundings into a single PBF",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "DEM provider name",
+            "schema": {
+              "type": "string",
+              "enum": ["gebco", "emod", "mapterhorn"]
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 14
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile X coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile Y coordinate",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Composite vector tile",
+            "content": {
+              "application/x-protobuf": {}
+            }
+          },
+          "204": {
+            "description": "No tile available"
+          },
+          "400": {
+            "description": "Invalid tile coordinates"
+          },
+          "404": {
+            "description": "Provider not found"
+          }
+        }
+      }
     }
   },
   "tags": [
@@ -897,6 +1002,10 @@
     {
       "name": "Soundings",
       "description": "Spot depth sounding generation"
+    },
+    {
+      "name": "Composite",
+      "description": "Composite tiles combining all vector sources"
     }
   ]
 }

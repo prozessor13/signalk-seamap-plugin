@@ -253,12 +253,52 @@ class Contours {
    * Get contour interval based on zoom level (returns single number for interval-based generation)
    */
   getContourInterval(z) {
-    if (z >= 14) return 10;
-    if (z >= 13) return 20;
-    if (z >= 12) return 50;
+    if (z >= 13) return 10;
+    if (z >= 12) return 20;
+    if (z >= 11) return 50;
     if (z >= 10) return 100;
     if (z >= 8) return 200;
     return 500;
+  }
+
+  /**
+   * Get contour tile (unified interface like tiles.getTile)
+   * Returns { timestamp, data: Buffer } or null
+   */
+  async getTile(name, z, x, y) {
+    const zNum = parseInt(z);
+    const xNum = parseInt(x);
+    const yNum = parseInt(y);
+
+    if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
+      return null;
+    }
+
+    // Check cache first
+    let cachedTile = this.tiles.getCachedTile('contours', name, zNum, xNum, yNum);
+    let sourceTile = await this.tiles.getTile(name, zNum, xNum, yNum).catch(() => null);
+
+    // Regenerate if cache is missing or source is newer
+    if (!cachedTile || (sourceTile?.timestamp > cachedTile.timestamp)) {
+      const tileData = await this.generateContourTile(name, zNum, xNum, yNum);
+
+      if (!tileData) {
+        return null;
+      }
+
+      // Save to cache
+      this.tiles.saveTileToCache('contours', name, zNum, xNum, yNum, tileData);
+
+      return {
+        timestamp: Date.now(),
+        data: tileData
+      };
+    }
+
+    return {
+      timestamp: cachedTile.timestamp,
+      data: cachedTile.data()
+    };
   }
 
   async deliverContourTileJSON(req, res) {
@@ -297,36 +337,16 @@ class Contours {
 
   async deliverContourTile(req, res) {
     const { name, z, x, y } = req.params;
-    const zNum = parseInt(z);
-    const xNum = parseInt(x);
-    const yNum = parseInt(y);
 
-    if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
-      return res.status(400).send('Invalid tile coordinates');
-    }
+    const tile = await this.getTile(name, z, x, y);
 
-    // Check cache first
-    let tile = this.tiles.getCachedTile('contours', name, zNum, xNum, yNum);
-    let source = this.tiles.getTile(name, zNum, xNum, yNum);
-
-    let tileData = null;
-    if (!tile || source?.timestamp > tile.timestamp) {
-      // Generate tile
-      tileData = await this.generateContourTile(name, zNum, xNum, yNum);
-
-      if (!tileData) {
-        return res.status(204).send();
-      }
-
-      // Save to cache
-      this.tiles.saveTileToCache('contours', name, zNum, xNum, yNum, tileData);
-    } else {
-      tileData = tile.data();
+    if (!tile) {
+      return res.status(204).send();
     }
 
     res.set('Content-Type', 'application/x-protobuf');
     res.set('Cache-Control', 'public, max-age=86400');
-    res.send(tileData);
+    res.send(tile.data);
   }
 
   middleware(router) {

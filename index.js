@@ -6,6 +6,7 @@ const Tiles = require('./src/tiles');
 const Contours = require('./src/contours');
 const Bathymetry = require('./src/bathymetry');
 const Soundings = require('./src/soundings');
+const Composite = require('./src/composite');
 
 module.exports = function(app) {
   const seamap = { app, options: {} };
@@ -17,6 +18,7 @@ module.exports = function(app) {
   const contours = new Contours(seamap, tiles);
   const bathymetry = new Bathymetry(seamap, tiles);
   const soundings = new Soundings(seamap, contours);
+  const composite = new Composite(seamap, tiles, contours, bathymetry, soundings);
 
   return {
     id: 'signalk-seamap-plugin',
@@ -65,6 +67,7 @@ module.exports = function(app) {
       contours.middleware(router);
       bathymetry.middleware(router);
       soundings.middleware(router);
+      composite.middleware(router);
     },
     getOpenApi: () => require('./openApi'),
     app: app
