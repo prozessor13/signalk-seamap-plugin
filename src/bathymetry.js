@@ -4,6 +4,25 @@ const encodeVectorTile = require('./maplibre-contour/vtpbf.js').default;
 const { GeomType } = require('./maplibre-contour/vtpbf.js');
 const Pmtiles = require('./pmtiles');
 
+// Shoelace signed area for flat [x,y,x,y,...] ring
+function ringSignedArea(ring) {
+  let area = 0;
+  for (let i = 0; i < ring.length - 2; i += 2)
+    area += ring[i] * ring[i + 3] - ring[i + 2] * ring[i + 1];
+  return area / 2;
+}
+
+// Ray-casting point-in-ring for flat [x,y,...] ring
+function pointInRing(px, py, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+    const xi = ring[i], yi = ring[i + 1], xj = ring[j], yj = ring[j + 1];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
 /**
  * Bathymetry class extends Contours to generate depth contours
  * Uses isobands (filled polygons) to represent depth ranges
@@ -126,15 +145,35 @@ class Bathymetry extends Contours {
       const lower = parseFloat(lowerStr);
       const upper = parseFloat(upperStr);
 
-      polygonFeatures.push({
-        type: GeomType.POLYGON,
-        geometry: polygons, // Array of polygons
-        properties: {
-          depth_min: Math.abs(upper), // upper is less negative (shallower)
-          depth_max: Math.abs(lower), // lower is more negative (deeper)
-          level: parseInt(level)
+      const properties = {
+        depth_min: Math.abs(upper), // upper is less negative (shallower)
+        depth_max: Math.abs(lower), // lower is more negative (deeper)
+        level: parseInt(level)
+      };
+
+      // Separate outer rings (CW in tile coords) from holes (CCW)
+      const outerRings = polygons.filter(p => ringSignedArea(p) < 0);
+      const holeRings = polygons.filter(p => ringSignedArea(p) >= 0);
+
+      // Assign each hole to the smallest outer ring that contains it
+      const features = outerRings.map(r => [r]);
+      for (const hole of holeRings) {
+        const hx = hole[0], hy = hole[1];
+        let bestIdx = -1, bestArea = Infinity;
+        for (let i = 0; i < outerRings.length; i++) {
+          const area = Math.abs(ringSignedArea(outerRings[i]));
+          if (area < bestArea && pointInRing(hx, hy, outerRings[i])) {
+            bestArea = area;
+            bestIdx = i;
+          }
         }
-      });
+        if (bestIdx >= 0) features[bestIdx].push(hole);
+        // holes with no matching outer ring are discarded
+      }
+
+      for (const geometry of features) {
+        polygonFeatures.push({ type: GeomType.POLYGON, geometry, properties });
+      }
 
       // Extract all rings from this band and split at tile boundaries
       for (const polygon of polygons) {
