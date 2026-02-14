@@ -158,6 +158,45 @@
                 transform-origin: bottom center;
             }
         }
+
+        /* Tooltip Styles */
+        .seamark-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 10000;
+            max-width: 400px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            line-height: 1.5;
+            user-select: none;
+        }
+
+        .seamark-tooltip.pinned {
+            pointer-events: auto;
+            user-select: text;
+        }
+
+        .seamark-tooltip .tooltip-key {
+            color: #90cdf4;
+            font-weight: bold;
+        }
+
+        .seamark-tooltip .tooltip-value {
+            color: #fbd38d;
+        }
+
+        .seamark-tooltip .tooltip-title {
+            color: #9ae6b4;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
     </style>
 </head>
 <body>
@@ -165,6 +204,7 @@
     <div class="style-switcher">
         <button id="style-seamap" class="active">Seamap</button>
         <button id="style-slim">Slim</button>
+        <button id="style-freenauticalchart">FreeNauticalChart (work in progress)</button>
     </div>
     <div id="map"></div>
 
@@ -262,6 +302,9 @@
 
             // Setup style switcher
             setupStyleSwitcher();
+
+            // Setup seamark tooltip
+            setupSeamarkTooltip();
 
             // Add vessel source and layer
             map.addSource('vessel', {
@@ -420,6 +463,10 @@
             document.getElementById('style-slim').addEventListener('click', () => {
                 switchStyle('slim');
             });
+
+            document.getElementById('style-freenauticalchart').addEventListener('click', () => {
+                switchStyle('freenauticalchart');
+            });
         }
 
         function switchStyle(styleName) {
@@ -489,6 +536,123 @@
                 };
                 boatImg2.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(boatSvg);
             });
+        }
+
+        // Seamark tooltip functionality
+        let tooltip = null;
+        let tooltipPinned = false;
+
+        function setupSeamarkTooltip() {
+            // Create tooltip element
+            tooltip = document.createElement('div');
+            tooltip.className = 'seamark-tooltip';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+
+            // Track mouse position over the map
+            map.on('mousemove', (e) => {
+                // Don't update tooltip on hover if it's pinned
+                if (tooltipPinned) {
+                    map.getCanvas().style.cursor = '';
+                    return;
+                }
+
+                const features = map.queryRenderedFeatures(e.point);
+
+                // Filter for seamark features (source-layer === 'seamark')
+                const seamarkFeatures = features.filter(f => {
+                    return f.sourceLayer === 'seamark';
+                });
+
+                if (seamarkFeatures.length > 0) {
+                    // Show tooltip for first seamark feature
+                    const feature = seamarkFeatures[0];
+                    showTooltip(e, feature);
+                    map.getCanvas().style.cursor = 'pointer';
+                } else {
+                    hideTooltip();
+                    map.getCanvas().style.cursor = '';
+                }
+            });
+
+            // Click on seamark to pin tooltip
+            map.on('click', (e) => {
+                const features = map.queryRenderedFeatures(e.point);
+
+                // Filter for seamark features (source-layer === 'seamark')
+                const seamarkFeatures = features.filter(f => {
+                    return f.sourceLayer === 'seamark';
+                });
+
+                if (seamarkFeatures.length > 0) {
+                    // Pin tooltip on seamark
+                    const feature = seamarkFeatures[0];
+                    showTooltip(e, feature);
+                    tooltipPinned = true;
+                    tooltip.classList.add('pinned');
+                } else {
+                    // Unpin and hide tooltip on map click
+                    tooltipPinned = false;
+                    tooltip.classList.remove('pinned');
+                    hideTooltip();
+                }
+            });
+
+            // Hide tooltip when mouse leaves the map (only if not pinned)
+            map.on('mouseleave', () => {
+                if (!tooltipPinned) {
+                    hideTooltip();
+                }
+            });
+        }
+
+        function showTooltip(e, feature) {
+            if (!tooltip) return;
+
+            // Build tooltip content
+            let content = '<div class="tooltip-title">Seamark Properties</div>';
+
+            // Sort properties alphabetically
+            const props = Object.keys(feature.properties).sort();
+
+            for (const key of props) {
+                const value = feature.properties[key];
+                // Skip internal MapLibre properties and null/undefined values
+                if (key.startsWith('$') || value === null || value === undefined) continue;
+
+                content += `<div><span class="tooltip-key">${escapeHtml(key)}:</span> <span class="tooltip-value">${escapeHtml(String(value))}</span></div>`;
+            }
+
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+
+            // Position tooltip near cursor
+            const x = e.point.x + 15;
+            const y = e.point.y + 15;
+
+            tooltip.style.left = `${x}px`;
+            tooltip.style.top = `${y}px`;
+
+            // Adjust if tooltip goes off screen
+            const rect = tooltip.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                tooltip.style.left = `${x - rect.width - 30}px`;
+            }
+            if (rect.bottom > window.innerHeight) {
+                tooltip.style.top = `${y - rect.height - 30}px`;
+            }
+        }
+
+        function hideTooltip() {
+            if (tooltip) {
+                tooltip.style.display = 'none';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>
