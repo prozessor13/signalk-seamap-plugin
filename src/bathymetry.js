@@ -117,7 +117,7 @@ class Bathymetry extends Contours {
     }
 
     // Upscale for smoother contours
-    const subsampleBelow = 100;
+    const subsampleBelow = 60;
 
     if (heightTile.width >= subsampleBelow) {
       heightTile = heightTile.materialize(2);

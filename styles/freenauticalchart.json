@@ -40,7 +40,7 @@
            ["in", ["get", "category"], ["literal", ["non-dangerous", "distributed_remains"]]],"freenauticalchart:wreck-non-dangerous",
            ["in", ["get", "category"], ["literal", ["dangerous", "mast_showing"]]],"freenauticalchart:wreck-dangerous",
            ["==", ["get", "category"], "hull_showing"],"freenauticalchart:wreck-hull_showing",
-           "freenauticalchart:obstruction"],
+           "freenauticalchart:wreck-non-dangerous"],
          "icon-overlap": "always", "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.3, 12, 1]
         }
     },
@@ -82,10 +82,20 @@
             "text-field": ["to-string", ["/", ["round", ["*", ["get", "depth"], 10]], 10]],
             "text-font": ["Noto Sans Regular"],
             "text-letter-spacing": 0.1, "text-max-width": 5, "text-padding": 10,
-            "text-offset": [0, -0.65], "text-pitch-alignment": "viewport",
             "text-size": ["interpolate", ["linear"], ["zoom"], 8, 8, 13, 10]
         },
         "paint": { "text-color": "#777" }
+    },
+    {
+        "id": "seabed", "type": "symbol", "source": "seamap", "source-layer": "seamark",
+        "filter": ["has", "seabed_surface"],
+        "layout": {
+            "text-field": ["get", "seabed_surface"],
+            "text-font": ["Noto Sans Regular"],
+            "text-letter-spacing": 0.1, "text-max-width": 5, "text-padding": 10,
+            "text-size": ["interpolate", ["linear"], ["zoom"], 8, 8, 13, 10]
+        },
+        "paint": { "text-color": "#333" }
     },
     {
         "id": "bathymetry_contours_label", "type": "symbol", "source": "seamap", "source-layer": "depth_contours", "minzoom": 8, "maxzoom": 22,
@@ -101,7 +111,7 @@
     },
     {
         "id": "restricted-areas", "type": "line", "source": "seamap", "source-layer": "seamark",
-        "filter": ["in", ["get", "type"], ["literal", ["restricted_area","military_area","production_area"]]],
+        "filter": ["in", ["get", "type"], ["literal", ["restricted_area","military_area","production_area", "cable_area", "dumping_ground","pipeline_area"]]],
         "paint": {
             "line-color": ["case",
                 ["in", ["get", "type"], ["literal", ["military_area"]]], "magenta",
@@ -109,19 +119,52 @@
                 ["in", ["get", "category"], ["literal", ["nature_reserve", "bird_sanctuary", "game_reserve", "seal_sanctuary","fish_sanctuary", "ecological_reserve", "essa", "pssa"]]], "green",
                 "red"
             ],
-            "line-dasharray": [4,2], "line-opacity": 0.8
+            "line-dasharray": [4,2], "line-opacity": 0.8, "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 10, 1.5]
+        }
+    },
+    {
+        "id": "restricted-areas-label", "type": "symbol", "source": "seamap", "source-layer": "seamark",
+        "filter": ["in", ["get", "type"], ["literal", ["restricted_area","military_area","production_area"]]],
+        "layout": {
+            "symbol-placement": "line",
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 11
+        },
+        "paint": {
+            "text-color": ["case",
+                ["in", ["get", "type"], ["literal", ["military_area"]]], "magenta",
+                ["in", ["get", "category"], ["literal", ["military"]]], "magenta",
+                ["in", ["get", "category"], ["literal", ["nature_reserve", "bird_sanctuary", "game_reserve", "seal_sanctuary","fish_sanctuary", "ecological_reserve", "essa", "pssa"]]], "green",
+                "red"
+            ],
+            "text-halo-color": "white",
+            "text-halo-width": 1.5
         }
     },
     {
         "id": "restricted-areas-fill", "type": "fill", "source": "seamap", "source-layer": "seamark",
+        "filter": ["in", ["get", "type"], ["literal", ["restricted_area","military_area","production_area", "cable_area", "dumping_ground","pipeline_area"]]],
+        "paint": {
+            "fill-color": ["case",
+                ["in", ["get", "type"], ["literal", ["military_area"]]], "magenta",
+                ["in", ["get", "category"], ["literal", ["military"]]], "magenta",
+                ["in", ["get", "category"], ["literal", ["nature_reserve", "bird_sanctuary", "game_reserve", "seal_sanctuary","fish_sanctuary", "ecological_reserve", "essa", "pssa"]]], "green",
+                "red"
+            ],
+            "fill-opacity": 0.04
+        }
+    },
+    {
+        "id": "restricted-areas-fill-pattern", "type": "fill", "source": "seamap", "source-layer": "seamark",
         "filter": ["any",
             ["in", ["get", "type"], ["literal", ["restricted_area","military_area","production_area"]]],
             ["in", ["get", "restriction"], ["literal", ["no_entry","no_anchoring", "restricted_entry"]]]
         ],
         "paint": {
             "fill-pattern": ["case",
-                ["==", ["get", "type"], "military_area"], "freenauticalchart:caution",
-                ["==", ["get", "category"], "military"], "freenauticalchart:caution",
+                ["==", ["get", "type"], "military_area"], "freenauticalchart:military",
+                ["==", ["get", "category"], "military"], "freenauticalchart:military",
                 ["in", "no_entry", ["get", "restriction"]], "freenauticalchart:no-entry",
                 ["in", "restricted_entry", ["get", "restriction"]], "freenauticalchart:no-anchor",
                 ["in", "no_anchoring", ["get", "restriction"]], "freenauticalchart:no-anchor",
@@ -133,6 +176,27 @@
                 0.4
             ]
         }
+    },
+    {
+        "id": "allowed-areas", "type": "line", "source": "seamap", "source-layer": "seamark",
+        "filter": ["in", ["get", "type"], ["literal", ["anchorage","anchor_berth","mooring","dredged_area","marine_farm","harbour"]]],
+        "paint": {
+            "line-color": ["case",
+                ["in", ["get", "type"], ["literal", ["anchorage", "anchor_berth", "mooring"]]], "magenta",
+                "black"
+            ],
+            "line-dasharray": [4,4], "line-opacity": 0.8, "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 10, 1.5]
+        }
+    },
+    {
+        "id": "allowed-areas-labels", "type": "symbol", "source": "seamap", "source-layer": "seamark",
+        "filter": ["in", ["get", "type"], ["literal", ["anchorage","anchor_berth","mooring","marine_farm"]]],
+        "layout": { "icon-image": ["case",
+            ["in", ["get", "type"], ["literal", ["anchorage", "anchor_berth", "mooring"]]], "freenauticalchart:anchor",
+            ["in", ["get", "category"], ["literal", ["crustaceans", "oysters_mussels", "pearl_culture"]]], "freenauticalchart:shellfish",
+            "freenauticalchart:marine-farm"
+        ], "icon-overlap": "always", "symbol-placement": "line", "symbol-spacing": 90, "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.2, 12, 0.8]  },
+        "paint": { "icon-opacity": 0.8 }
     },
     {
         "id": "land_outline", "type": "line", "source": "seamap", "source-layer": "land",
@@ -179,12 +243,12 @@
     {
         "id": "TSS-separation-boundary", "type": "line", "source": "seamap", "source-layer": "seamark",
         "filter": ["==",["get","type"],"separation_boundary"],
-        "paint": { "line-color": "magenta", "line-width": 2, "line-dasharray": [4,4], "line-opacity": 0.4 }
+        "paint": { "line-color": "magenta", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 10, 2], "line-dasharray": [4,4], "line-opacity": 0.4 }
     },
     {
         "id": "TSS-separation-line", "type": "line", "source": "seamap", "source-layer": "seamark",
         "filter": ["==",["get","type"],"separation_line"],
-        "paint": { "line-color": "magenta", "line-width": 2, "line-opacity": 0.4 }
+        "paint": { "line-color": "magenta", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 10, 2], "line-opacity": 0.4 }
     },
     {
         "id": "traffic-lane", "type": "line", "source": "seamap", "source-layer": "seamark",
@@ -228,12 +292,38 @@
         "layout": { "icon-image": "freenauticalchart:platform", "icon-overlap": "always", "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 10, 1] }
     },
     {
+        "id": "ais", "type": "circle", "source": "seamap", "source-layer": "seamark", "minzoom": 8,
+        "filter": ["in", "type:ais,", ["get","radio_station"]],
+        "paint": { "circle-radius": 30, "circle-color": "magenta" }
+    },
+    {
         "id": "lights", "type": "symbol", "source": "seamap", "source-layer": "seamark", "minzoom": 10,
         "filter": ["has", "light_color"],
         "layout": {
           "icon-image": ["concat", "freenauticalchart:", ["case", ["==",["get","light_category"], "floodlight"],"floodlight/","light/"], ["get","light_color"]],
           "icon-rotate": -45, "icon-overlap": "always", "icon-rotation-alignment": "viewport",
           "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 12, 1]
+        }
+    },
+    {
+        "id": "light_ray", "type": "line", "source": "seamap", "source-layer": "light", "minzoom": 5,
+        "filter": ["==",["get","subtype"],"ray"],
+        "layout": {"line-cap": "round","line-join": "round"},
+        "paint": {
+            "line-color": "#666",
+            "line-dasharray": [2,3],
+            "line-opacity": 0.8,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.5, 10, 1]
+        }
+    },
+    {
+        "id": "light_arc", "type": "line", "source": "seamap", "source-layer": "light", "minzoom": 5,
+        "filter": ["==", ["get", "subtype"], "arc"],
+        "layout": {"line-cap": "round", "line-join": "round"},
+        "paint": {
+            "line-color": ["case", ["==", ["get", "color"], "green"], "#009a00", ["==", ["get", "color"], "red"], "#F00", "#FF0"],
+            "line-opacity": 1,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.5, 14, 3]
         }
     },
     {
@@ -365,9 +455,40 @@
             ],
             "text-halo-color": "#FFF",
             "text-halo-width": 1
-            }
+        }
+    },
+    {
+        "id": "seamark-line-label", "type": "symbol", "source": "seamap", "source-layer": "seamark", "minzoom": 13,
+        "filter": ["all", ["==", ["geometry-type"], "LineString"], ["has", "name"], ["!", ["in", ["get", "type"], ["literal", ["landmark", "harbour"]]]]],
+        "layout": {
+            "symbol-placement": "line-center",
+            "text-field":["get", "name"],
+            "text-font": ["Noto Sans Bold"],
+            "text-letter-spacing": 0.1, "text-line-height": 1.6, "text-max-width": 5,
+            "text-offset": [0, -0.65], "text-pitch-alignment": "viewport",
+            "text-size": ["interpolate", ["linear"], ["zoom"], 13, 8, 16, 12]
         },
-        {
+        "paint": {
+            "text-color": "#888",
+            "text-halo-color": "white",
+            "text-halo-width": 1
+        }
+    },
+    {
+        "id": "seamark-label", "type": "symbol", "source": "seamap", "source-layer": "seamark", "minzoom": 12,
+        "filter": ["all", ["==", ["geometry-type"], "Point"], ["has", "name"], ["!", ["in", ["get", "type"], ["literal", ["landmark", "harbour"]]]]],
+        "layout": {
+          "text-anchor": "right", "text-field": ["get", "name"], "text-font": ["Noto Sans Regular"],
+          "text-offset": [-1.3, -0.3],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 12, 8, 16, 12]
+        },
+        "paint": {
+            "text-color": "#888",
+            "text-halo-color": "white",
+            "text-halo-width": 1
+        }
+    },
+    {
         "id": "lights-label", "type": "symbol", "source": "seamap", "source-layer": "seamark", "minzoom": 11,
         "filter": ["has", "light_color"],
         "layout": {
