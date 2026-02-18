@@ -70,6 +70,41 @@
             color: white;
         }
 
+        /* Bathymetry Switcher */
+        .bathy-switcher {
+            position: absolute;
+            top: 52px;
+            right: 10px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .bathy-switcher button {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+            font-family: sans-serif;
+        }
+
+        .bathy-switcher button:hover {
+            background: #f0f0f0;
+        }
+
+        .bathy-switcher button.active {
+            background: #2980b9;
+            color: white;
+        }
+
         /* HUD Styles */
         .ui {
             position: absolute;
@@ -204,7 +239,10 @@
     <div class="style-switcher">
         <button id="style-seamap" class="active">Seamap</button>
         <button id="style-slim">Slim</button>
-        <button id="style-freenauticalchart">FreeNauticalChart (work in progress)</button>
+    </div>
+    <div class="bathy-switcher">
+        <button id="bathy-gebco" class="">GEBCO</button>
+        <button id="bathy-emod" class="">EMODnet</button>
     </div>
     <div id="map"></div>
 
@@ -260,7 +298,19 @@
 
         // Get query parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const bathymetry = urlParams.get('bathymetry') || '';
+        const bathymetry = urlParams.get('bathymetry') || 'gebco';
+
+        // Bathymetry switcher - highlight active button
+        document.getElementById(`bathy-${bathymetry === 'emod' ? 'emod' : 'gebco'}`).classList.add('active');
+
+        document.getElementById('bathy-gebco').addEventListener('click', () => switchBathymetry('gebco'));
+        document.getElementById('bathy-emod').addEventListener('click', () => switchBathymetry('emod'));
+
+        function switchBathymetry(value) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('bathymetry', value);
+            window.location.search = params.toString();
+        }
 
         // Build style URL with query parameters
         let styleUrl = '/plugins/signalk-seamap-plugin/styles/seamap.json?base_url=' + window.location.origin;
@@ -274,7 +324,9 @@
             hash: true,
             center: [6.3, 46.2],
             zoom: 4,
-            style: styleUrl
+            minZoom: 4,
+            style: styleUrl,
+            fillLargeMeshArrays: true
         });
 
         // Add controls
@@ -462,10 +514,6 @@
 
             document.getElementById('style-slim').addEventListener('click', () => {
                 switchStyle('slim');
-            });
-
-            document.getElementById('style-freenauticalchart').addEventListener('click', () => {
-                switchStyle('freenauticalchart');
             });
         }
 

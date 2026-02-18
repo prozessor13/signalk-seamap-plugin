@@ -32,7 +32,7 @@
       "type": "fill",
       "source": "composite",
       "source-layer": "depth_areas",
-      "minzoom": 5,
+      "minzoom": 4,
       "filter": ["<=",["get","depth_max"],50],
       "paint": {"fill-color":["match",["get","level"],0,"#cadbc1",1,"#73cefe",2,"#83d4fe",3,"#9adcfe",4,"#bae7fe",5,"#d4f1f9",6,"#e9f7ff","#73cefe"],"fill-opacity":1}
     },
