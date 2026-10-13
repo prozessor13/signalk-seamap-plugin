@@ -290,6 +290,11 @@ GET /styles/seamap.json
 
 Provides sprite sheets for map icons and symbols in MapLibre GL format.
 
+> **License:** The seamark icons in `sprites/freenauticalchart*` are derived from
+> [quantenschaum/mapping](https://github.com/quantenschaum/mapping/tree/a0639c25dd4f6e3a795a3510c3caee7bb151348f/icons)
+> and licensed under GPL-3.0 (see `sprites/LICENSE-freenauticalchart`). The MIT license
+> of this plugin does not apply to them.
+
 ## Glyphs
 
 **Directory**: `glyphs/`
@@ -301,5 +306,6 @@ Currently only Noto Sans fonts are included with this plugin.
 - [Maptoolkit.net](https://maptoolkit.com) - For supporting this project and providing hardware resources
 - [PMTiles](https://github.com/protomaps/PMTiles) - Cloud-optimized tile archives
 - [MapLibre GL](https://maplibre.org/) - Open-source map rendering
+- [quantenschaum/mapping](https://github.com/quantenschaum/mapping) - Seamark icons (GPL-3.0)
 - [OpenStreetMap](https://www.openstreetmap.org/) - Map data
 - [GEBCO](https://www.gebco.net/) - Bathymetry data

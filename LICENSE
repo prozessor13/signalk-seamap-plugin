@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Max Demmelabuer
+Copyright (c) 2026 Max Demmelbauer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The MIT License above applies to the plugin code. It does not apply to the
+seamark icon sprites `sprites/freenauticalchart*`, which are derived from
+https://github.com/quantenschaum/mapping (icons/) and licensed under the
+GNU General Public License v3.0, see `sprites/LICENSE-freenauticalchart`.
