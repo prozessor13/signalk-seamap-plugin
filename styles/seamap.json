@@ -98,8 +98,8 @@
       "type": "symbol",
       "source": "composite",
       "source-layer": "soundings",
-      "filter": [">",["get","depth"],5],
-      "layout": {"text-field":["to-string",["round",["get","depth"]]],"text-font":["Noto Sans Regular"],"text-letter-spacing":0.1,"text-max-width":5,"text-padding":50,"text-offset":[0,-0.65],"text-pitch-alignment":"viewport","text-size":["interpolate",["linear"],["zoom"],8,8,13,10]},
+      "filter": ["all",[">",["get","depth"],5],["<=",["get","zoom"],["zoom"]]],
+      "layout": {"text-allow-overlap":true,"text-ignore-placement":true,"text-field":["to-string",["round",["get","depth"]]],"text-font":["Noto Sans Regular"],"text-letter-spacing":0.1,"text-max-width":5,"text-padding":50,"text-offset":[0,-0.65],"text-pitch-alignment":"viewport","text-size":["interpolate",["linear"],["zoom"],8,8,13,10]},
       "paint": {"text-color":"#777"}
     },
     {
@@ -107,8 +107,8 @@
       "type": "symbol",
       "source": "composite",
       "source-layer": "soundings",
-      "filter": ["all",["<=",["get","depth"],5],[">",["get","depth"],0.1]],
-      "layout": {"symbol-sort-key":["get","elevation"],"text-field":["to-string",["/",["round",["*",["get","depth"],10]],10]],"text-font":["Noto Sans Regular"],"text-letter-spacing":0.1,"text-max-width":5,"text-padding":10,"text-size":["interpolate",["linear"],["zoom"],8,8,13,10]},
+      "filter": ["all",["<=",["get","depth"],5],[">",["get","depth"],0.1],["<=",["get","zoom"],["zoom"]]],
+      "layout": {"text-allow-overlap":true,"text-ignore-placement":true,"text-field":["to-string",["/",["round",["*",["get","depth"],10]],10]],"text-font":["Noto Sans Regular"],"text-letter-spacing":0.1,"text-max-width":5,"text-padding":10,"text-size":["interpolate",["linear"],["zoom"],8,8,13,10]},
       "paint": {"text-color":"#777"}
     },
     {
@@ -176,9 +176,18 @@
       "type": "symbol",
       "source": "composite",
       "source-layer": "seamark",
-      "filter": ["in",["get","type"],["literal",["anchorage","anchor_berth","mooring","marine_farm"]]],
+      "filter": ["all",["in",["get","type"],["literal",["anchorage","anchor_berth","mooring","marine_farm"]]],["!",["all",["==",["get","type"],"mooring"],["==",["get","category"],"dolphin"]]]],
       "layout": {"icon-image":["case",["in",["get","type"],["literal",["anchorage","anchor_berth","mooring"]]],"freenauticalchart:anchor",["in",["get","category"],["literal",["crustaceans","oysters_mussels","pearl_culture"]]],"freenauticalchart:shellfish","freenauticalchart:marine-farm"],"icon-overlap":"always","symbol-placement":"line","symbol-spacing":90,"icon-size":["interpolate",["linear"],["zoom"],8,0.2,12,0.8]},
       "paint": {"icon-opacity":0.8}
+    },
+    {
+      "id": "mooring-dolphins",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "seamark",
+      "minzoom": 14,
+      "filter": ["all",["==",["get","type"],"mooring"],["==",["get","category"],"dolphin"]],
+      "layout": {"icon-image":"freenauticalchart:circle/black","icon-size":["interpolate",["linear"],["zoom"],14,0.25,18,0.4],"icon-allow-overlap":true,"icon-ignore-placement":true}
     },
     {
       "id": "cables-pipes",

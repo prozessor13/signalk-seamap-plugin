@@ -7,6 +7,7 @@ const Contours = require('./src/contours');
 const Bathymetry = require('./src/bathymetry');
 const Soundings = require('./src/soundings');
 const Composite = require('./src/composite');
+const Charts = require('./src/charts');
 
 module.exports = function(app) {
   const seamap = { app, options: {} };
@@ -19,6 +20,7 @@ module.exports = function(app) {
   const bathymetry = new Bathymetry(seamap, tiles);
   const soundings = new Soundings(seamap, contours);
   const composite = new Composite(seamap, tiles, contours, bathymetry, soundings);
+  const charts = new Charts(seamap);
 
   return {
     id: 'signalk-seamap-plugin',
@@ -48,12 +50,25 @@ module.exports = function(app) {
           description: 'comma separated string with all depth levels for bathymetry contourlines',
           default: '0,2,5,10,20,50'
         },
+        soundingsShallowSpacing: {
+          type: 'number',
+          title: 'Spot sounding spacing — shallow water (px)',
+          description: 'Approximate screen distance in pixels between spot soundings in shallow water (2 m and less). Soundings are selected server-side (shoalest first, fixed positions), so zooming only adds or removes soundings. Between 2 m and 30 m the spacing blends towards the deep water value.',
+          default: 32
+        },
+        soundingsDeepSpacing: {
+          type: 'number',
+          title: 'Spot sounding spacing — deep water (px)',
+          description: 'Approximate screen distance in pixels between spot soundings in deep water (30 m and more).',
+          default: 64
+        },
       }
     }),
     start: function(options) {
       this.started = true;
       seamap.options = options;
       tiles.initializeTileCache();
+      charts.register();
     },
     stop: function() {
       this.started = false;

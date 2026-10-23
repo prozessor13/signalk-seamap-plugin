@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Seamap Plugin - Vector Tile Inspector</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src='/signalk-seamap-plugin/maplibre-gl.js'></script>
+    <link rel='stylesheet' href='/signalk-seamap-plugin/maplibre-gl.css' />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; background: #e8ecef; }
+
+        .btn-link {
+            position: absolute; top: 10px; background: #fff; padding: 9px 14px;
+            border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+            text-decoration: none; color: #2c6e9b; font-size: 14px; font-weight: bold; z-index: 1000;
+        }
+        .btn-link:hover { background: #f4f4f4; }
+        .home-link { left: 10px; }
+        .map-link { left: 190px; color: #9b59b6; }
+
+        .bathy-switcher {
+            position: absolute; top: 10px; right: 10px; background: #fff; border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.2); z-index: 1000; display: flex; padding: 4px; gap: 4px;
+        }
+        .bathy-switcher button {
+            padding: 8px 14px; border: none; background: transparent; border-radius: 4px;
+            cursor: pointer; font-size: 14px; font-weight: 500;
+        }
+        .bathy-switcher button:hover { background: #f0f0f0; }
+        .bathy-switcher button.active { background: #2980b9; color: #fff; }
+
+        /* Layer legend / toggle panel */
+        .legend {
+            position: absolute; top: 60px; right: 10px; width: 210px; max-height: calc(100vh - 80px);
+            overflow-y: auto; background: rgba(255,255,255,.96); border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.2); z-index: 1000; padding: 8px 6px; font-size: 13px;
+        }
+        .legend h3 { margin: 4px 6px 8px; font-size: 12px; text-transform: uppercase; color: #666; letter-spacing: .05em; }
+        .legend .row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; }
+        .legend .row:hover { background: #eef2f5; }
+        .legend .row.off { opacity: .4; }
+        .legend .sw { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.25); }
+        .legend .nm { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .legend .ct { color: #999; font-variant-numeric: tabular-nums; font-size: 11px; }
+        .legend .actions { display: flex; gap: 6px; padding: 6px; }
+        .legend .actions button { flex: 1; padding: 5px; font-size: 12px; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
+        .legend .actions button:hover { background: #f0f0f0; }
+
+        /* Feature inspector popup */
+        .inspect {
+            position: absolute; background: rgba(20,24,28,.94); color: #eee; padding: 0;
+            border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px;
+            z-index: 2000; max-width: 380px; max-height: 60vh; overflow-y: auto;
+            box-shadow: 0 4px 18px rgba(0,0,0,.4); line-height: 1.5; pointer-events: none;
+        }
+        .inspect.pinned { pointer-events: auto; }
+        .inspect .grp { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .inspect .grp:last-child { border-bottom: none; }
+        .inspect .grp-title { font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .inspect .grp-title .sw { width: 11px; height: 11px; border-radius: 2px; }
+        .inspect .geom { color: #7f8c8d; font-weight: normal; font-size: 11px; }
+        .inspect .k { color: #90cdf4; }
+        .inspect .v { color: #fbd38d; }
+        .inspect .empty { color: #7f8c8d; }
+
+        .info {
+            position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,.94);
+            border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.2); z-index: 1000;
+            padding: 8px 10px; font-size: 12px; color: #333; font-variant-numeric: tabular-nums;
+        }
+        .info label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
+        .info .sep { color: #bbb; margin: 0 6px; }
+    </style>
+</head>
+<body>
+    <a href="./" class="btn-link home-link">← Downloader</a>
+    <a href="./demo.html" class="btn-link map-link">🗺️ Map</a>
+
+    <div class="bathy-switcher">
+        <button id="bathy-gebco">GEBCO</button>
+        <button id="bathy-emod">EMODnet</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="legend">
+        <h3>Source layers</h3>
+        <div class="actions">
+            <button id="toggle-all-on">All</button>
+            <button id="toggle-all-off">None</button>
+        </div>
+        <div id="legend-rows"></div>
+    </div>
+
+    <div class="info">
+        <label><input type="checkbox" id="chk-boundaries" checked> Tile grid</label>
+        <span class="sep">|</span>
+        <span id="info-zxy">z– / –,–</span>
+    </div>
+
+    <script>
+        const PLUGIN = '/plugins/signalk-seamap-plugin';
+        const urlParams = new URLSearchParams(window.location.search);
+        const bathymetry = urlParams.get('bathymetry') || 'gebco';
+        document.getElementById(`bathy-${bathymetry === 'emod' ? 'emod' : 'gebco'}`).classList.add('active');
+        document.getElementById('bathy-gebco').addEventListener('click', () => switchBathymetry('gebco'));
+        document.getElementById('bathy-emod').addEventListener('click', () => switchBathymetry('emod'));
+        function switchBathymetry(v) {
+            const p = new URLSearchParams(window.location.search);
+            p.set('bathymetry', v);
+            window.location.search = p.toString();
+        }
+
+        const SOURCE_ID = 'composite';
+        const tilejsonUrl = `${PLUGIN}/composite/${bathymetry}.json?base_url=${window.location.origin}`;
+
+        // Distinct color per layer via the golden-angle hue sequence.
+        function layerColor(i) { return `hsl(${(i * 137.508) % 360}, 65%, 50%)`; }
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            hash: true,
+            center: [6.3, 46.2],
+            zoom: 6,
+            style: {
+                version: 8,
+                glyphs: `${PLUGIN}/glyphs/{fontstack}/{range}.pbf`,
+                sources: {
+                    [SOURCE_ID]: { type: 'vector', url: tilejsonUrl }
+                },
+                layers: [
+                    { id: 'bg', type: 'background', paint: { 'background-color': '#e8ecef' } }
+                ]
+            }
+        });
+        map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+        map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+        map.showTileBoundaries = true;
+
+        const state = { layers: [] }; // [{id, color, visible}]
+
+        map.on('load', async () => {
+            let vectorLayers = [];
+            try {
+                const tj = await (await fetch(tilejsonUrl)).json();
+                vectorLayers = (tj.vector_layers || []).map(l => l.id);
+            } catch (e) { console.error('Failed to load tilejson', e); }
+            if (!vectorLayers.length) {
+                // Fallback: nothing declared -> show a note.
+                document.getElementById('legend-rows').innerHTML =
+                    '<div style="padding:8px;color:#c0392b">No vector_layers in tilejson.</div>';
+                return;
+            }
+
+            vectorLayers.forEach((id, i) => {
+                const color = layerColor(i);
+                state.layers.push({ id, color, visible: true });
+                addInspectLayers(id, color);
+            });
+
+            buildLegend();
+            updateInfo();
+        });
+
+        // For each source-layer add fill (polygons), line (lines) and circle (points)
+        // so every geometry type is drawn, each in the layer's colour.
+        function addInspectLayers(id, color) {
+            map.addLayer({
+                id: `${id}__fill`, type: 'fill', source: SOURCE_ID, 'source-layer': id,
+                filter: ['==', ['geometry-type'], 'Polygon'],
+                paint: { 'fill-color': color, 'fill-opacity': 0.18, 'fill-outline-color': color }
+            });
+            map.addLayer({
+                id: `${id}__line`, type: 'line', source: SOURCE_ID, 'source-layer': id,
+                filter: ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
+                paint: { 'line-color': color, 'line-width': 1.4, 'line-opacity': 0.9 }
+            });
+            map.addLayer({
+                id: `${id}__circle`, type: 'circle', source: SOURCE_ID, 'source-layer': id,
+                filter: ['==', ['geometry-type'], 'Point'],
+                paint: {
+                    'circle-color': color, 'circle-radius': 3.2, 'circle-opacity': 0.85,
+                    'circle-stroke-color': '#fff', 'circle-stroke-width': 0.6
+                }
+            });
+        }
+
+        function setLayerVisible(id, visible) {
+            const vis = visible ? 'visible' : 'none';
+            for (const suffix of ['__fill', '__line', '__circle']) {
+                if (map.getLayer(id + suffix)) map.setLayoutProperty(id + suffix, 'visibility', vis);
+            }
+        }
+
+        function buildLegend() {
+            const rows = document.getElementById('legend-rows');
+            rows.innerHTML = '';
+            for (const l of state.layers) {
+                const row = document.createElement('div');
+                row.className = 'row';
+                row.innerHTML =
+                    `<span class="sw" style="background:${l.color}"></span>` +
+                    `<span class="nm">${l.id}</span><span class="ct" id="ct-${l.id}"></span>`;
+                row.addEventListener('click', () => {
+                    l.visible = !l.visible;
+                    setLayerVisible(l.id, l.visible);
+                    row.classList.toggle('off', !l.visible);
+                });
+                rows.appendChild(row);
+            }
+        }
+
+        document.getElementById('toggle-all-on').addEventListener('click', () => setAll(true));
+        document.getElementById('toggle-all-off').addEventListener('click', () => setAll(false));
+        function setAll(v) {
+            state.layers.forEach(l => { l.visible = v; setLayerVisible(l.id, v); });
+            document.querySelectorAll('.legend .row').forEach(r => r.classList.toggle('off', !v));
+        }
+
+        // Live feature counts per layer (rendered in current view).
+        function updateCounts() {
+            if (!state.layers.length) return;
+            const counts = {};
+            for (const f of map.queryRenderedFeatures()) {
+                if (f.sourceLayer) counts[f.sourceLayer] = (counts[f.sourceLayer] || 0) + 1;
+            }
+            for (const l of state.layers) {
+                const el = document.getElementById('ct-' + l.id);
+                if (el) el.textContent = counts[l.id] ? counts[l.id] : '';
+            }
+        }
+        map.on('idle', updateCounts);
+
+        // Tile grid toggle + z/x/y readout
+        document.getElementById('chk-boundaries').addEventListener('change', (e) => {
+            map.showTileBoundaries = e.target.checked;
+        });
+        function lngLatToTile(lng, lat, z) {
+            const n = Math.pow(2, z);
+            const x = Math.floor((lng + 180) / 360 * n);
+            const latRad = lat * Math.PI / 180;
+            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+            return { x, y };
+        }
+        function updateInfo() {
+            const z = Math.floor(map.getZoom());
+            const c = map.getCenter();
+            const t = lngLatToTile(c.lng, c.lat, z);
+            document.getElementById('info-zxy').textContent = `z${z} / ${t.x},${t.y}`;
+        }
+        map.on('move', updateInfo);
+
+        // -------- feature inspector popup --------
+        const inspect = document.createElement('div');
+        inspect.className = 'inspect';
+        inspect.style.display = 'none';
+        document.body.appendChild(inspect);
+        let pinned = false;
+
+        function colorFor(sourceLayer) {
+            const l = state.layers.find(x => x.id === sourceLayer);
+            return l ? l.color : '#888';
+        }
+
+        function renderInspect(features) {
+            // Group features by source-layer.
+            const groups = {};
+            for (const f of features) {
+                const sl = f.sourceLayer || '(none)';
+                (groups[sl] = groups[sl] || []).push(f);
+            }
+            let html = '';
+            for (const sl of Object.keys(groups).sort()) {
+                for (const f of groups[sl].slice(0, 6)) {
+                    html += `<div class="grp"><div class="grp-title">` +
+                        `<span class="sw" style="background:${colorFor(sl)}"></span>${escapeHtml(sl)} ` +
+                        `<span class="geom">${f.geometry ? f.geometry.type : ''}</span></div>`;
+                    const keys = Object.keys(f.properties || {}).sort();
+                    if (!keys.length) html += '<div class="empty">no properties</div>';
+                    for (const k of keys) {
+                        html += `<div><span class="k">${escapeHtml(k)}</span>: ` +
+                            `<span class="v">${escapeHtml(String(f.properties[k]))}</span></div>`;
+                    }
+                    html += '</div>';
+                }
+            }
+            return html;
+        }
+
+        function showInspectAt(point) {
+            const features = map.queryRenderedFeatures(point).filter(f => f.source === SOURCE_ID);
+            if (!features.length) { hideInspect(); return false; }
+            inspect.innerHTML = renderInspect(features);
+            inspect.style.display = 'block';
+            let x = point.x + 16, y = point.y + 16;
+            inspect.style.left = x + 'px';
+            inspect.style.top = y + 'px';
+            const r = inspect.getBoundingClientRect();
+            if (r.right > window.innerWidth) inspect.style.left = (point.x - r.width - 16) + 'px';
+            if (r.bottom > window.innerHeight) inspect.style.top = Math.max(4, point.y - r.height - 16) + 'px';
+            return true;
+        }
+        function hideInspect() { if (!pinned) inspect.style.display = 'none'; }
+
+        map.on('mousemove', (e) => {
+            if (pinned) return;
+            const hit = showInspectAt(e.point);
+            map.getCanvas().style.cursor = hit ? 'pointer' : '';
+        });
+        map.on('mouseout', hideInspect);
+        map.on('click', (e) => {
+            pinned = false;
+            const hit = showInspectAt(e.point);
+            if (hit) { pinned = true; inspect.classList.add('pinned'); }
+            else { inspect.classList.remove('pinned'); inspect.style.display = 'none'; }
+        });
+
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        map.on('error', (e) => console.error('Map error:', e && e.error ? e.error : e));
+    </script>
+</body>
+</html>
