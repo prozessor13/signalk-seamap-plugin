@@ -36,40 +36,34 @@ const STYLES_DIR = path.join(__dirname, '..', 'styles');
 
 // C. Hillshade tuning for ol-mapbox-style's shader.
 // olms reads only these 5 hillshade-* paint props (sun elevation 35 and overall
-// opacity 0.3 are hard-coded; hillshade-method is ignored). When shadow/accent
-// colors are left unset they default to pure black, which looks harsh and muddy.
-// We set soft, cool colors for a nicer look. Tweak these to taste:
+// opacity 0.3 are hard-coded; hillshade-method is ignored). Neutral MapLibre-like
+// colors; the DEM sources must declare `encoding` in the style (olms does not read
+// it from the TileJSON), otherwise the relief decodes as noise.
 const HILLSHADE = {
-  'hillshade-shadow-color': '#26323f',     // deep cool slate -> more contrast (not flat gray)
+  'hillshade-shadow-color': '#000000',
   'hillshade-highlight-color': '#ffffff',
-  'hillshade-accent-color': '#26323f',     // dark for definition, with a hint of blue (not pure black)
+  'hillshade-accent-color': '#000000',
   'hillshade-illumination-direction': 315  // NW light (classic cartographic)
 };
-// olms scales relief by 5*exaggeration; bump it for more presence.
-const HILLSHADE_EXAGGERATION_FACTOR = 1.6;
-// olms hard-codes the hillshade opacity at 0.3 (not settable via paint). To get a
-// more opaque/contrasty result we render each hillshade layer N times; two stacked
-// layers composite to ~0.51. Set to 1 to disable stacking.
-const HILLSHADE_STACK = 2;
+// olms scales the elevations by 5*exaggeration (physical slopes), MapLibre weights
+// relief by zoom. Factors applied to the source exaggeration, interpolated by zoom,
+// matched visually against MapLibre in public/compare.html.
+const HILLSHADE_EXAGGERATION_FACTORS = [[9, 3], [11, 1.8]];
 
-// Returns the (possibly stacked) tuned hillshade layers, or null for other layers.
+// Tunes a hillshade layer in place; returns false for other layers. (Stacking
+// duplicates does not help: olms merges consecutive same-source layers into one.)
 function tuneHillshade(layer) {
-  if (layer.type !== 'hillshade') return null;
+  if (layer.type !== 'hillshade') return false;
   layer.paint = layer.paint || {};
   for (const [k, v] of Object.entries(HILLSHADE)) {
     if (layer.paint[k] === undefined) layer.paint[k] = v;
   }
-  if (typeof layer.paint['hillshade-exaggeration'] === 'number') {
-    layer.paint['hillshade-exaggeration'] =
-      +(layer.paint['hillshade-exaggeration'] * HILLSHADE_EXAGGERATION_FACTOR).toFixed(3);
+  const exaggeration = layer.paint['hillshade-exaggeration'];
+  if (typeof exaggeration === 'number') {
+    layer.paint['hillshade-exaggeration'] = ['interpolate', ['linear'], ['zoom'],
+      ...HILLSHADE_EXAGGERATION_FACTORS.flatMap(([z, f]) => [z, +(exaggeration * f).toFixed(3)])];
   }
-  const stack = [layer];
-  for (let i = 2; i <= HILLSHADE_STACK; i++) {
-    const dup = JSON.parse(JSON.stringify(layer));
-    dup.id = `${layer.id}-${i}`;
-    stack.push(dup);
-  }
-  return stack;
+  return true;
 }
 
 // Directional line symbols whose single (midpoint) icon must be rotated along the
@@ -152,12 +146,7 @@ function transform(style, name) {
       fixLineIconRotation(layer);
       if (JSON.stringify(layer.layout) !== before) overlapFixed++;
     }
-    const tunedHillshade = tuneHillshade(layer);
-    if (tunedHillshade) {
-      layers.push(...tunedHillshade);
-      hillshadeTuned++;
-      continue;
-    }
+    if (tuneHillshade(layer)) hillshadeTuned++;
     layers.push(layer);
   }
   out.layers = layers;

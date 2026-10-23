@@ -175,7 +175,7 @@
             }
             return style;
         }
-        const fetchStyle = async (url) => prepareStyle(await (await fetch(url)).json());
+        const fetchStyle = async (url) => prepareStyle(await (await fetch(url, { cache: 'no-cache' })).json());
 
         // MapLibre needs absolute URLs; Freeboard hands ol-mapbox-style the chart URL
         // without base_url, so the -ol style's URLs stay root-relative.

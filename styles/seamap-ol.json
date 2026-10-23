@@ -18,10 +18,12 @@
   "sources": {
     "mapterhorn": {
       "type": "raster-dem",
+      "encoding": "terrarium",
       "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/mapterhorn.json?base_url={BASE_URL_ENCODED}"
     },
     "bathymetry": {
       "type": "raster-dem",
+      "encoding": "terrarium",
       "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/{BATHYMETRY}.json?base_url={BASE_URL_ENCODED}"
     },
     "composite": {
@@ -82,24 +84,23 @@
       "type": "hillshade",
       "source": "bathymetry",
       "paint": {
-        "hillshade-exaggeration": 0.224,
+        "hillshade-exaggeration": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.42,
+          11,
+          0.252
+        ],
         "hillshade-method": "combined",
-        "hillshade-shadow-color": "#26323f",
+        "hillshade-shadow-color": "#000000",
         "hillshade-highlight-color": "#ffffff",
-        "hillshade-accent-color": "#26323f",
-        "hillshade-illumination-direction": 315
-      }
-    },
-    {
-      "id": "bathymetry_shading-2",
-      "type": "hillshade",
-      "source": "bathymetry",
-      "paint": {
-        "hillshade-exaggeration": 0.224,
-        "hillshade-method": "combined",
-        "hillshade-shadow-color": "#26323f",
-        "hillshade-highlight-color": "#ffffff",
-        "hillshade-accent-color": "#26323f",
+        "hillshade-accent-color": "#000000",
         "hillshade-illumination-direction": 315
       }
     },
@@ -2017,24 +2018,23 @@
       "type": "hillshade",
       "source": "mapterhorn",
       "paint": {
-        "hillshade-exaggeration": 0.32,
+        "hillshade-exaggeration": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.6,
+          11,
+          0.36
+        ],
         "hillshade-method": "combined",
-        "hillshade-shadow-color": "#26323f",
+        "hillshade-shadow-color": "#000000",
         "hillshade-highlight-color": "#ffffff",
-        "hillshade-accent-color": "#26323f",
-        "hillshade-illumination-direction": 315
-      }
-    },
-    {
-      "id": "hillshading-2",
-      "type": "hillshade",
-      "source": "mapterhorn",
-      "paint": {
-        "hillshade-exaggeration": 0.32,
-        "hillshade-method": "combined",
-        "hillshade-shadow-color": "#26323f",
-        "hillshade-highlight-color": "#ffffff",
-        "hillshade-accent-color": "#26323f",
+        "hillshade-accent-color": "#000000",
         "hillshade-illumination-direction": 315
       }
     },

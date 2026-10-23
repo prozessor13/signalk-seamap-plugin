@@ -18,10 +18,12 @@
   "sources": {
     "mapterhorn": {
       "type": "raster-dem",
+      "encoding": "terrarium",
       "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/mapterhorn.json?base_url={BASE_URL_ENCODED}"
     },
     "bathymetry": {
       "type": "raster-dem",
+      "encoding": "terrarium",
       "url": "{BASE_URL}/plugins/signalk-seamap-plugin/tiles/{BATHYMETRY}.json?base_url={BASE_URL_ENCODED}"
     },
     "composite": {
