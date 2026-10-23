@@ -1000,6 +1000,13 @@
       "filter": [
         "all",
         [
+          "!=",
+          [
+            "geometry-type"
+          ],
+          "Point"
+        ],
+        [
           "in",
           [
             "get",
@@ -1078,6 +1085,116 @@
         "icon-overlap": "always",
         "symbol-placement": "line",
         "symbol-spacing": 90,
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.2,
+          12,
+          0.8
+        ],
+        "icon-allow-overlap": true
+      },
+      "paint": {
+        "icon-opacity": 0.8
+      }
+    },
+    {
+      "id": "allowed-areas-points",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "seamark",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "Point"
+        ],
+        [
+          "in",
+          [
+            "get",
+            "type"
+          ],
+          [
+            "literal",
+            [
+              "anchorage",
+              "anchor_berth",
+              "mooring",
+              "marine_farm"
+            ]
+          ]
+        ],
+        [
+          "!",
+          [
+            "all",
+            [
+              "==",
+              [
+                "get",
+                "type"
+              ],
+              "mooring"
+            ],
+            [
+              "==",
+              [
+                "get",
+                "category"
+              ],
+              "dolphin"
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "icon-image": [
+          "case",
+          [
+            "in",
+            [
+              "get",
+              "type"
+            ],
+            [
+              "literal",
+              [
+                "anchorage",
+                "anchor_berth",
+                "mooring"
+              ]
+            ]
+          ],
+          "freenauticalchart:anchor",
+          [
+            "in",
+            [
+              "get",
+              "category"
+            ],
+            [
+              "literal",
+              [
+                "crustaceans",
+                "oysters_mussels",
+                "pearl_culture"
+              ]
+            ]
+          ],
+          "freenauticalchart:shellfish",
+          "freenauticalchart:marine-farm"
+        ],
+        "icon-overlap": "always",
         "icon-size": [
           "interpolate",
           [
