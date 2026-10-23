@@ -70,152 +70,6 @@
       }
     },
     {
-      "id": "rocks_outline",
-      "type": "symbol",
-      "source": "composite",
-      "source-layer": "seamark",
-      "filter": [
-        "==",
-        [
-          "get",
-          "type"
-        ],
-        "rock"
-      ],
-      "layout": {
-        "icon-overlap": "always",
-        "icon-image": "freenauticalchart:obstruction",
-        "icon-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          8,
-          0.4,
-          12,
-          0.8
-        ],
-        "icon-allow-overlap": true
-      }
-    },
-    {
-      "id": "rocks",
-      "type": "symbol",
-      "source": "composite",
-      "source-layer": "seamark",
-      "filter": [
-        "==",
-        [
-          "get",
-          "type"
-        ],
-        "rock"
-      ],
-      "layout": {
-        "icon-overlap": "always",
-        "icon-image": [
-          "concat",
-          "freenauticalchart:rock-",
-          [
-            "get",
-            "water_level"
-          ]
-        ],
-        "icon-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          8,
-          0.6,
-          12,
-          1
-        ],
-        "icon-allow-overlap": true
-      }
-    },
-    {
-      "id": "obstructions",
-      "type": "symbol",
-      "source": "composite",
-      "source-layer": "seamark",
-      "minzoom": 8,
-      "filter": [
-        "in",
-        [
-          "get",
-          "type"
-        ],
-        "wreck"
-      ],
-      "layout": {
-        "icon-image": [
-          "case",
-          [
-            "in",
-            [
-              "get",
-              "category"
-            ],
-            [
-              "literal",
-              [
-                "non-dangerous",
-                "distributed_remains"
-              ]
-            ]
-          ],
-          "freenauticalchart:wreck-non-dangerous",
-          [
-            "in",
-            [
-              "get",
-              "category"
-            ],
-            [
-              "literal",
-              [
-                "dangerous",
-                "mast_showing"
-              ]
-            ]
-          ],
-          "freenauticalchart:wreck-dangerous",
-          [
-            "==",
-            [
-              "get",
-              "category"
-            ],
-            "hull_showing"
-          ],
-          "freenauticalchart:wreck-hull_showing",
-          "freenauticalchart:wreck-non-dangerous"
-        ],
-        "icon-overlap": "always",
-        "icon-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          8,
-          0.3,
-          12,
-          1
-        ],
-        "icon-allow-overlap": true
-      }
-    },
-    {
       "id": "bathymetry_contours_deep",
       "type": "line",
       "source": "composite",
@@ -1976,6 +1830,152 @@
         "line-color": "#3d3d3d",
         "line-width": 1.4,
         "line-opacity": 1
+      }
+    },
+    {
+      "id": "rocks_outline",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "seamark",
+      "filter": [
+        "==",
+        [
+          "get",
+          "type"
+        ],
+        "rock"
+      ],
+      "layout": {
+        "icon-overlap": "always",
+        "icon-image": "freenauticalchart:obstruction",
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.4,
+          12,
+          0.8
+        ],
+        "icon-allow-overlap": true
+      }
+    },
+    {
+      "id": "rocks",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "seamark",
+      "filter": [
+        "==",
+        [
+          "get",
+          "type"
+        ],
+        "rock"
+      ],
+      "layout": {
+        "icon-overlap": "always",
+        "icon-image": [
+          "concat",
+          "freenauticalchart:rock-",
+          [
+            "get",
+            "water_level"
+          ]
+        ],
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.6,
+          12,
+          1
+        ],
+        "icon-allow-overlap": true
+      }
+    },
+    {
+      "id": "obstructions",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "seamark",
+      "minzoom": 8,
+      "filter": [
+        "in",
+        [
+          "get",
+          "type"
+        ],
+        "wreck"
+      ],
+      "layout": {
+        "icon-image": [
+          "case",
+          [
+            "in",
+            [
+              "get",
+              "category"
+            ],
+            [
+              "literal",
+              [
+                "non-dangerous",
+                "distributed_remains"
+              ]
+            ]
+          ],
+          "freenauticalchart:wreck-non-dangerous",
+          [
+            "in",
+            [
+              "get",
+              "category"
+            ],
+            [
+              "literal",
+              [
+                "dangerous",
+                "mast_showing"
+              ]
+            ]
+          ],
+          "freenauticalchart:wreck-dangerous",
+          [
+            "==",
+            [
+              "get",
+              "category"
+            ],
+            "hull_showing"
+          ],
+          "freenauticalchart:wreck-hull_showing",
+          "freenauticalchart:wreck-non-dangerous"
+        ],
+        "icon-overlap": "always",
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          8,
+          0.3,
+          12,
+          1
+        ],
+        "icon-allow-overlap": true
       }
     },
     {
