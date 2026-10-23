@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seamap Renderer Compare</title>
+    <link rel="stylesheet" href="/signalk-seamap-plugin/maplibre-gl.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.11.0/ol.css" />
+    <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; background: #eef2f5; color: #1d2a35; }
+        body { display: flex; flex-direction: column; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 12px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.15); z-index: 10; }
+        .toolbar a { color: #2c6e9b; font-weight: bold; text-decoration: none; }
+        .toolbar label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+        .toolbar select, .toolbar button { font: inherit; padding: 4px 8px; border: 1px solid #c4ccd4; border-radius: 4px; background: #fff; cursor: pointer; }
+        .toolbar button:hover { background: #f1f5f8; }
+        .toolbar button.running { background: #2c6e9b; color: #fff; border-color: #2c6e9b; }
+        .group { display: inline-flex; gap: 8px; align-items: center; padding-right: 14px; border-right: 1px solid #dde3e8; }
+        .group:last-child { border-right: 0; }
+        #view-state { font-family: ui-monospace, Menlo, monospace; color: #52606d; }
+        .panes { flex: 1; display: grid; gap: 2px; background: #9aa5b1; min-height: 0; }
+        .pane { position: relative; background: #fff; min-width: 0; min-height: 0; }
+        .pane.hidden { display: none; }
+        .pane .map { position: absolute; inset: 0; }
+        .pane .badge { position: absolute; top: 6px; left: 6px; z-index: 5; background: rgba(255,255,255,0.92); padding: 4px 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); pointer-events: none; }
+        .pane .badge b { display: block; }
+        .pane .badge span { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #52606d; }
+        .pane .crosshair { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; z-index: 4; pointer-events: none; display: none; }
+        .pane .crosshair::before, .pane .crosshair::after { content: ''; position: absolute; background: #e5484d; }
+        .pane .crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+        .pane .crosshair::after { top: 6px; left: 0; height: 2px; width: 14px; }
+        body.show-crosshair .crosshair { display: block; }
+        #results { position: fixed; right: 12px; bottom: 12px; z-index: 20; background: #fff; border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.3); padding: 10px 12px; display: none; max-width: calc(100vw - 24px); }
+        #results table { border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+        #results th, #results td { padding: 3px 8px; text-align: right; border-bottom: 1px solid #eef2f5; }
+        #results th:first-child, #results td:first-child { text-align: left; }
+        #results .close { float: right; cursor: pointer; border: 0; background: none; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="group">
+            <a href="./">← Downloader</a>
+            <a href="./demo.html">Demo</a>
+        </div>
+        <div class="group">
+            <label>Style
+                <select id="style">
+                    <option value="slim">slim → seamap-ol-slim (Charts-API)</option>
+                    <option value="seamap">seamap → seamap-ol</option>
+                </select>
+            </label>
+            <label>Bathymetrie
+                <select id="bathymetry">
+                    <option value="gebco">GEBCO</option>
+                    <option value="emod">EMODnet</option>
+                </select>
+            </label>
+            <label title="OL-Panes bekommen den MapLibre-Quellstyle statt der -ol-Variante (zeigt, was build-ol-styles.js bringt)">
+                <input type="checkbox" id="ol-raw"> OL: unkonvertiert
+            </label>
+            <label title="Entfernt den ['<=',['get','zoom'],['zoom']]-Filter von den Sounding-Layern (für Tiles ohne zoom-Property)">
+                <input type="checkbox" id="no-zoom-filter"> Soundings ohne zoom-Filter
+            </label>
+        </div>
+        <div class="group">
+            <label><input type="checkbox" class="pane-toggle" value="ml" checked> MapLibre</label>
+            <label><input type="checkbox" class="pane-toggle" value="olms" checked> OL + ol-mapbox-style</label>
+            <label><input type="checkbox" class="pane-toggle" value="olml" checked> OL + MapLibreLayer</label>
+        </div>
+        <div class="group">
+            <label><input type="checkbox" id="crosshair"> Fadenkreuz</label>
+            <label><input type="checkbox" id="tile-debug"> Tile-Grenzen</label>
+            <button id="wobble" title="Zoom pendelt ±0.15 um den aktuellen Wert — macht springende Labels sichtbar">Zoom-Wackeln</button>
+            <button id="bench" title="Fährt pro Renderer (allein sichtbar) dieselbe Pan/Zoom-Strecke ab und misst FPS">Benchmark</button>
+        </div>
+        <div class="group">
+            <span id="view-state"></span>
+        </div>
+    </div>
+
+    <div class="panes" id="panes">
+        <div class="pane" data-pane="ml">
+            <div class="map" id="map-ml"></div>
+            <div class="badge"><b>MapLibre GL JS (Referenz)</b><span class="stats"></span></div>
+            <div class="crosshair"></div>
+        </div>
+        <div class="pane" data-pane="olms">
+            <div class="map" id="map-olms"></div>
+            <div class="badge"><b>OL + ol-mapbox-style (wie Freeboard 3.x)</b><span class="stats"></span></div>
+            <div class="crosshair"></div>
+        </div>
+        <div class="pane" data-pane="olml">
+            <div class="map" id="map-olml"></div>
+            <div class="badge"><b>OL + MapLibreLayer (Option)</b><span class="stats"></span></div>
+            <div class="crosshair"></div>
+        </div>
+    </div>
+
+    <div id="results">
+        <button class="close" id="results-close">×</button>
+        <b>Benchmark</b>
+        <table id="results-table"></table>
+    </div>
+
+    <script src="/signalk-seamap-plugin/maplibre-gl.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "ol": "https://cdn.jsdelivr.net/npm/ol@10.11.0/index.js",
+            "ol/": "https://cdn.jsdelivr.net/npm/ol@10.11.0/",
+            "rbush": "https://esm.sh/rbush@4.0.1",
+            "pbf": "https://esm.sh/pbf@5.1.2",
+            "earcut": "https://esm.sh/earcut@3.2.4",
+            "geotiff": "https://esm.sh/geotiff@3.1.0-beta.0",
+            "zarrita": "https://esm.sh/zarrita@0.7.5",
+            "ol-mapbox-style": "https://cdn.jsdelivr.net/npm/ol-mapbox-style@12.6.1/src/index.js",
+            "mapbox-to-css-font": "https://esm.sh/mapbox-to-css-font@3.3.0",
+            "@geoblocks/ol-maplibre-layer": "https://cdn.jsdelivr.net/npm/@geoblocks/ol-maplibre-layer@2.0.0/lib/index.js",
+            "@maplibre/maplibre-gl-style-spec": "https://esm.sh/@maplibre/maplibre-gl-style-spec@23.3.0",
+            "maplibre-gl": "data:text/javascript,const m=window.maplibregl;export default m;export const Map=m.Map;"
+        }
+    }
+    </script>
+    <script type="module">
+        // Side-by-side comparison of the renderers a seamap chart can end up in:
+        //  - ml:   MapLibre GL JS with the source style (reference, = demo.html)
+        //  - olms: OpenLayers + ol-mapbox-style with the -ol style variant, applied the
+        //          way Freeboard-SK 3.x does it (applyMapStyle: fetch, normaliseStyleForOl,
+        //          apply into a LayerGroup). Versions match Freeboard 3.4 (ol ^10.7,
+        //          ol-mapbox-style ^12.3.5, style-spec ^23.3).
+        //  - olml: OpenLayers + @geoblocks/ol-maplibre-layer, i.e. how a MapLibre
+        //          renderer embedded in Freeboard would behave.
+        // All views are kept in sync; the view state is kept in the URL hash.
+        import OlMap from 'ol/Map.js';
+        import View from 'ol/View.js';
+        import LayerGroup from 'ol/layer/Group.js';
+        import TileLayer from 'ol/layer/Tile.js';
+        import TileDebug from 'ol/source/TileDebug.js';
+        import { fromLonLat, toLonLat } from 'ol/proj.js';
+        import { defaults as defaultControls } from 'ol/control/defaults.js';
+        import { apply } from 'ol-mapbox-style';
+        import { MapLibreLayer } from '@geoblocks/ol-maplibre-layer';
+        import { v8, createPropertyExpression, isExpression } from '@maplibre/maplibre-gl-style-spec';
+
+        const PLUGIN = '/plugins/signalk-seamap-plugin';
+        const OL_STYLE = { slim: 'seamap-ol-slim', seamap: 'seamap-ol' };
+        const params = new URLSearchParams(location.search);
+        const styleName = params.get('style') === 'seamap' ? 'seamap' : 'slim';
+        const bathymetry = params.get('bathymetry') === 'emod' ? 'emod' : 'gebco';
+        const olRaw = params.get('olraw') === '1';
+        const noZoomFilter = params.get('nozoomfilter') === '1';
+        const panesParam = (params.get('panes') || 'ml,olms,olml').split(',');
+
+        const $ = (id) => document.getElementById(id);
+        $('style').value = styleName;
+        $('bathymetry').value = bathymetry;
+        $('ol-raw').checked = olRaw;
+        for (const key of ['style', 'bathymetry']) {
+            $(key).addEventListener('change', () => { params.set(key, $(key).value); location.search = params; });
+        }
+        $('ol-raw').addEventListener('change', () => { params.set('olraw', $('ol-raw').checked ? '1' : '0'); location.search = params; });
+        $('no-zoom-filter').checked = noZoomFilter;
+        $('no-zoom-filter').addEventListener('change', () => { params.set('nozoomfilter', $('no-zoom-filter').checked ? '1' : '0'); location.search = params; });
+
+        // Debug: drop the soundings LOD filter so tiles without a `zoom` property still show.
+        const ZOOM_FILTER = JSON.stringify(['<=', ['get', 'zoom'], ['zoom']]);
+        function prepareStyle(style) {
+            if (!noZoomFilter) return style;
+            for (const layer of style.layers) {
+                if (layer.id.startsWith('spot_soundings') && Array.isArray(layer.filter) && layer.filter[0] === 'all') {
+                    layer.filter = layer.filter.filter((f) => JSON.stringify(f) !== ZOOM_FILTER);
+                }
+            }
+            return style;
+        }
+        const fetchStyle = async (url) => prepareStyle(await (await fetch(url, { cache: 'no-cache' })).json());
+
+        // MapLibre needs absolute URLs; Freeboard hands ol-mapbox-style the chart URL
+        // without base_url, so the -ol style's URLs stay root-relative.
+        const mlStyleUrl = `${PLUGIN}/styles/${styleName}.json?base_url=${location.origin}&bathymetry=${bathymetry}`;
+        const olStyleUrl = olRaw
+            ? `${PLUGIN}/styles/${styleName}.json?bathymetry=${bathymetry}`
+            : `${PLUGIN}/styles/${OL_STYLE[styleName]}.json?bathymetry=${bathymetry}`;
+
+        // ---- view state (MapLibre zoom/bearing; OL zoom = MapLibre zoom + 1) ----
+        function readHash() {
+            const [z, lat, lon, b] = location.hash.slice(1).split('/').map(Number);
+            if ([z, lat, lon].every(Number.isFinite)) return { zoom: z, lat, lon, bearing: b || 0 };
+            return { zoom: 11, lat: 44.53, lon: 14.45, bearing: 0 };
+        }
+        let state = readHash();
+        let hashTimer;
+        function publishState() {
+            $('view-state').textContent =
+                `z ${state.zoom.toFixed(2)} (OL ${(state.zoom + 1).toFixed(2)})  ${state.lat.toFixed(4)}, ${state.lon.toFixed(4)}  ${state.bearing.toFixed(0)}°`;
+            clearTimeout(hashTimer);
+            hashTimer = setTimeout(() => history.replaceState(null, '',
+                `#${state.zoom.toFixed(2)}/${state.lat.toFixed(5)}/${state.lon.toFixed(5)}/${state.bearing.toFixed(1)}`), 300);
+        }
+
+        // ---- Freeboard 3.x style normalisation (port of chart-utils.ts normaliseStyleForOl) ----
+        const OL_RENDERABLE_LAYER_TYPES = new Set(['background', 'fill', 'fill-extrusion', 'line', 'symbol', 'circle', 'raster', 'hillshade']);
+        function isUnevaluableByOl(group, layerType, key, value) {
+            if (!isExpression(value)) return false;
+            const spec = v8[`${group}_${layerType}`]?.[key];
+            if (!spec) return false;
+            try {
+                return createPropertyExpression(value, spec).result === 'error';
+            } catch {
+                return true;
+            }
+        }
+        const normalisationLog = [];
+        function normaliseStyleForOl(style) {
+            const before = style.layers.length;
+            style.layers = style.layers.filter((l) => typeof l?.type === 'string' && OL_RENDERABLE_LAYER_TYPES.has(l.type));
+            if (style.layers.length !== before) normalisationLog.push(`${before - style.layers.length} Layer entfernt (Typ)`);
+            for (const layer of style.layers) {
+                for (const group of ['layout', 'paint']) {
+                    const bag = layer[group];
+                    if (!bag) continue;
+                    for (const key of Object.keys(bag)) {
+                        if (isUnevaluableByOl(group, layer.type, key, bag[key])) {
+                            normalisationLog.push(`${layer.id}: ${group}.${key} entfernt`);
+                            delete bag[key];
+                        }
+                    }
+                }
+            }
+            return style;
+        }
+
+        // ---- render statistics per pane ----
+        const stats = {};
+        function makeStats(key) {
+            stats[key] = { frames: 0, last: performance.now(), fps: 0, el: document.querySelector(`[data-pane="${key}"] .stats`) };
+            return () => { stats[key].frames++; };
+        }
+        setInterval(() => {
+            const now = performance.now();
+            for (const s of Object.values(stats)) {
+                s.fps = s.frames * 1000 / (now - s.last);
+                s.frames = 0;
+                s.last = now;
+                s.el.textContent = `${s.fps.toFixed(0)} renders/s` + (s.extra ? `  ${s.extra()}` : '');
+            }
+        }, 1000);
+
+        // ---- view sync ----
+        let syncing = false;
+        const views = {};
+        function syncFrom(source) {
+            if (syncing) return;
+            syncing = true;
+            try {
+                for (const [key, v] of Object.entries(views)) if (key !== source) v.set(state);
+            } finally {
+                syncing = false;
+            }
+            publishState();
+        }
+
+        // MapLibre reference
+        async function createMapLibre() {
+            const map = new maplibregl.Map({
+                container: 'map-ml',
+                style: await fetchStyle(mlStyleUrl),
+                center: [state.lon, state.lat],
+                zoom: state.zoom,
+                bearing: state.bearing,
+                fillLargeMeshArrays: true,
+                attributionControl: false
+            });
+            map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+            map.on('render', makeStats('ml'));
+            map.on('move', () => {
+                if (syncing) return;
+                const c = map.getCenter();
+                state = { lon: c.lng, lat: c.lat, zoom: map.getZoom(), bearing: map.getBearing() };
+                syncFrom('ml');
+            });
+            map.on('error', (e) => console.error('[ml]', e.error || e));
+            views.ml = {
+                map,
+                set: (s) => map.jumpTo({ center: [s.lon, s.lat], zoom: s.zoom, bearing: s.bearing }),
+                resize: () => map.resize(),
+                debug: (on) => { map.showTileBoundaries = on; }
+            };
+        }
+
+        // OpenLayers panes share view handling
+        function createOlMap(key, target) {
+            const view = new View({
+                center: fromLonLat([state.lon, state.lat]),
+                zoom: state.zoom + 1,
+                rotation: -state.bearing * Math.PI / 180,
+                constrainResolution: false
+            });
+            const map = new OlMap({ target, view, controls: defaultControls({ attribution: false }) });
+            map.on('postrender', makeStats(key));
+            view.on(['change:center', 'change:resolution', 'change:rotation'], () => {
+                if (syncing) return;
+                const [lon, lat] = toLonLat(view.getCenter());
+                state = { lon, lat, zoom: view.getZoom() - 1, bearing: -view.getRotation() * 180 / Math.PI };
+                syncFrom(key);
+            });
+            const debugLayer = new TileLayer({ source: new TileDebug(), visible: false, zIndex: 1000 });
+            map.addLayer(debugLayer);
+            views[key] = {
+                map,
+                set: (s) => {
+                    view.setCenter(fromLonLat([s.lon, s.lat]));
+                    view.setZoom(s.zoom + 1);
+                    view.setRotation(-s.bearing * Math.PI / 180);
+                },
+                resize: () => map.updateSize(),
+                debug: (on) => debugLayer.setVisible(on)
+            };
+            return map;
+        }
+
+        // Freeboard 3.x: applyMapStyle(group, chart.url)
+        async function createOlms() {
+            const map = createOlMap('olms', 'map-olms');
+            const group = new LayerGroup({ zIndex: 10 });
+            map.addLayer(group);
+            const style = normaliseStyleForOl(await fetchStyle(olStyleUrl));
+            if (normalisationLog.length) console.warn('[olms] Freeboard-Normalisierung:', normalisationLog);
+            await apply(group, style, { styleUrl: new URL(olStyleUrl, location.href).href });
+        }
+
+        async function createOlml() {
+            const map = createOlMap('olml', 'map-olml');
+            const layer = new MapLibreLayer({ mapLibreOptions: { style: await fetchStyle(mlStyleUrl), fillLargeMeshArrays: true }, zIndex: 10 });
+            map.addLayer(layer);
+            // Count frames MapLibre actually draws inside the OL layer, too.
+            const inner = { frames: 0 };
+            const waitMap = setInterval(() => {
+                if (!layer.mapLibreMap) return;
+                clearInterval(waitMap);
+                layer.mapLibreMap.on('render', () => inner.frames++);
+                layer.mapLibreMap.on('error', (e) => console.error('[olml]', e.error || e));
+            }, 100);
+            let lastInner = 0, lastT = performance.now();
+            stats.olml.extra = () => {
+                const now = performance.now();
+                const r = (inner.frames - lastInner) * 1000 / (now - lastT);
+                lastInner = inner.frames; lastT = now;
+                return `(ML ${r.toFixed(0)}/s)`;
+            };
+        }
+
+        // ---- pane visibility ----
+        const toggles = [...document.querySelectorAll('.pane-toggle')];
+        function layoutPanes() {
+            const visible = toggles.filter((t) => t.checked).map((t) => t.value);
+            document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('hidden', !visible.includes(p.dataset.pane)));
+            $('panes').style.gridTemplateColumns = `repeat(${Math.max(1, visible.length)}, 1fr)`;
+            requestAnimationFrame(() => Object.values(views).forEach((v) => v.resize()));
+            params.set('panes', visible.join(','));
+            history.replaceState(null, '', `?${params}${location.hash}`);
+        }
+        toggles.forEach((t) => {
+            t.checked = panesParam.includes(t.value);
+            t.addEventListener('change', layoutPanes);
+        });
+
+        $('crosshair').addEventListener('change', (e) => document.body.classList.toggle('show-crosshair', e.target.checked));
+        $('tile-debug').addEventListener('change', (e) => Object.values(views).forEach((v) => v.debug(e.target.checked)));
+
+        // ---- zoom wobble: small zoom oscillation to expose jumping labels ----
+        let wobble = null;
+        $('wobble').addEventListener('click', () => {
+            if (wobble) {
+                cancelAnimationFrame(wobble.raf);
+                state.zoom = wobble.base;
+                syncFrom(null);
+                wobble = null;
+                $('wobble').classList.remove('running');
+                return;
+            }
+            wobble = { base: state.zoom, t0: performance.now() };
+            $('wobble').classList.add('running');
+            const step = (t) => {
+                state.zoom = wobble.base + 0.15 * Math.sin((t - wobble.t0) / 2000 * 2 * Math.PI);
+                syncFrom(null);
+                wobble.raf = requestAnimationFrame(step);
+            };
+            wobble.raf = requestAnimationFrame(step);
+        });
+
+        // ---- benchmark: same scripted pan/zoom path per renderer, each shown alone ----
+        const BENCH_MS = 15000;
+        function benchPath(start, t) {
+            // t in [0,1]: zoom out 2 levels while panning, then back in, with a slow rotation sweep.
+            const k = Math.sin(t * Math.PI);
+            return {
+                lon: start.lon + 0.25 * Math.sin(t * 2 * Math.PI),
+                lat: start.lat + 0.12 * (1 - Math.cos(t * 2 * Math.PI)),
+                zoom: start.zoom - 2 * k,
+                bearing: start.bearing + 30 * k
+            };
+        }
+        function runPath(start) {
+            return new Promise((resolve) => {
+                const intervals = [];
+                let last = null;
+                const t0 = performance.now();
+                const step = (now) => {
+                    if (last !== null) intervals.push(now - last);
+                    last = now;
+                    const t = (now - t0) / BENCH_MS;
+                    if (t >= 1) {
+                        state = start;
+                        syncFrom(null);
+                        return resolve(intervals);
+                    }
+                    state = benchPath(start, t);
+                    syncFrom(null);
+                    requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
+            });
+        }
+        $('bench').addEventListener('click', async () => {
+            const btn = $('bench');
+            if (btn.classList.contains('running')) return;
+            btn.classList.add('running');
+            const start = { ...state };
+            const original = toggles.map((t) => t.checked);
+            const rows = [];
+            for (const t of toggles.filter((t, i) => original[i])) {
+                toggles.forEach((o) => { o.checked = o === t; });
+                layoutPanes();
+                // let tiles of the start view load before measuring
+                await new Promise((r) => setTimeout(r, 3000));
+                const iv = await runPath(start);
+                const sorted = [...iv].sort((a, b) => a - b);
+                const p = (q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+                rows.push({
+                    name: t.parentElement.textContent.trim(),
+                    fps: iv.length * 1000 / BENCH_MS,
+                    p50: p(0.5), p95: p(0.95), max: sorted[sorted.length - 1],
+                    janks: iv.filter((x) => x > 50).length
+                });
+            }
+            toggles.forEach((t, i) => { t.checked = original[i]; });
+            layoutPanes();
+            btn.classList.remove('running');
+            $('results-table').innerHTML =
+                '<tr><th>Renderer</th><th>FPS</th><th>p50 ms</th><th>p95 ms</th><th>max ms</th><th>&gt;50 ms</th></tr>' +
+                rows.map((r) => `<tr><td>${r.name}</td><td>${r.fps.toFixed(1)}</td><td>${r.p50.toFixed(1)}</td><td>${r.p95.toFixed(1)}</td><td>${r.max.toFixed(0)}</td><td>${r.janks}</td></tr>`).join('');
+            $('results').style.display = 'block';
+            console.log('[bench]', navigator.userAgent, `${innerWidth}x${innerHeight}@${devicePixelRatio}`, rows);
+        });
+        $('results-close').addEventListener('click', () => { $('results').style.display = 'none'; });
+
+        for (const [key, create] of [['ml', createMapLibre], ['olms', createOlms], ['olml', createOlml]]) {
+            try {
+                await create();
+            } catch (e) {
+                console.error(`[${key}]`, e);
+            }
+        }
+        layoutPanes();
+        publishState();
+        // Debug handle for the console: compare.views.ml.map, compare.jump({zoom: 13}), ...
+        window.compare = { views, stats, jump: (s) => { state = { ...state, ...s }; syncFrom(null); } };
+    </script>
+</body>
+</html>

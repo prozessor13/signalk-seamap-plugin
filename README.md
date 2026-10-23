@@ -18,6 +18,7 @@ This plugin provides offline-first map tile serving for SignalK with intelligent
 - **Sprites & Glyphs**: MapLibre GL compatible sprite sheets and font glyphs
 - **Custom Styles**: MapLibre GL style definitions
 - **On-Demand Contour Lines**: Dynamically generates contour and bathymetry lines with filesystem caching
+- **Signal K Charts API**: Registers as a resource provider for `charts`, so apps like Freeboard discover the seacharts automatically
 
 ## Screenshots
 
@@ -117,7 +118,9 @@ The plugin can be configured through SignalK's plugin configuration interface:
   pmtilesPath: '/path/to/pmtiles',           // Offline PMTiles storage (default: ~/.signalk/seamap/pmtiles)
   stylesPath: '/path/to/styles',             // MapLibre GL stylesheets (default: ~/.signalk/seamap/styles)
   tilesPath: '/path/to/tiles-cache',         // Tile cache directory (default: ~/.signalk/seamap/tiles)
-  bathymetryDepthLevels: '2,5,10,20,50'      // Comma-separated depth levels for bathymetry contours (default: '2,5,10,20,50')
+  bathymetryDepthLevels: '2,5,10,20,50',     // Comma-separated depth levels for bathymetry contours (default: '2,5,10,20,50')
+  soundingsShallowSpacing: 32,               // Spot sounding spacing in px for water <= 2 m (default: 32)
+  soundingsDeepSpacing: 64                   // Spot sounding spacing in px for water >= 30 m (default: 64)
 }
 ```
 
@@ -281,6 +284,62 @@ GET /styles/seamap.json
 - Sprite and glyph URL templates
 - Layer styling for map rendering
 - 24-hour cache headers for performance
+
+---
+
+## Signal K Resources / Charts API
+
+The plugin registers as a [Signal K resource provider](https://demo.signalk.io/documentation/Developing/Plugins/Resource_Providers.html)
+for the `charts` resource type. Any Signal K app that consumes `resources/charts`
+— most notably [Freeboard](https://github.com/SignalK/freeboard-sk) — therefore
+discovers this plugin's seacharts automatically, with no manual chart configuration.
+
+The charts are exposed as MapLibre GL style definitions (`type: mapstyleJSON`).
+Freeboard renders these with **OpenLayers + `ol-mapbox-style`** (not MapLibre GL JS),
+so the charts point at the `seamap-ol-slim` style variant that is tuned for that
+renderer (see [Style variants](#style-variants) below). It is offered once per
+bathymetry source:
+
+| identifier | style | bathymetry |
+|---|---|---|
+| `seamap-gebco` | `seamap-ol-slim` | GEBCO |
+| `seamap-emod` | `seamap-ol-slim` | EMODnet |
+
+The charts are **read-only** (they are provided by the plugin; `setResource`/`deleteResource`
+are not supported).
+
+**Endpoints (served by the Signal K server):**
+```bash
+GET /signalk/v2/api/resources/charts               # lists both
+GET /signalk/v2/api/resources/charts/seamap-gebco   # single chart
+```
+
+### Style variants
+
+`styles/seamap.json` and `styles/slim.json` target MapLibre GL JS (used by the
+demo web app). `ol-mapbox-style` — what Freeboard uses — renders a subset of the
+spec differently, so two optimized variants are generated from them:
+
+- `styles/seamap-ol.json` (from `seamap.json`)
+- `styles/seamap-ol-slim.json` (from `slim.json`)
+
+Regenerate after editing the source styles:
+```bash
+npm run build:styles
+```
+
+The transform (`scripts/build-ol-styles.js`) applies two fixes:
+1. **Icon visibility:** mirrors MapLibre's `icon-overlap`/`text-overlap` onto the
+   legacy `icon-allow-overlap`/`text-allow-overlap` that `ol-mapbox-style` reads —
+   otherwise seamark icons get dropped by label collision (declutter).
+2. **Submarine cables/pipelines:** replaces the icon-along-line layer with dashed
+   `line` layers, since `ol-mapbox-style` places only one icon at the line midpoint
+   and does not render `line-pattern` on lines.
+
+> **Freeboard notes:** Multi-sprite icons require `ol-mapbox-style` >= 12.6.0 (the
+> version `^12.3.5` resolves to). Text labels are rendered using web fonts (Noto Sans),
+> not this plugin's PBF glyph endpoint. Directional symbols (TSS lane arrows, one-way
+> markings) render as a single symbol rather than repeated along the line.
 
 ---
 

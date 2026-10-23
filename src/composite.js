@@ -3,6 +3,21 @@ const Pbf = require('pbf').default;
 const { VectorTile } = require('@mapbox/vector-tile');
 const encodeVectorTile = require('./maplibre-contour/vtpbf.js').default;
 
+// Even-odd point-in-polygon over all rings of a feature (flat [x0, y0, x1, y1, ...] rings),
+// so holes (islands) are excluded.
+function pointInRings(px, py, rings) {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+      const xi = ring[i], yi = ring[i + 1], xj = ring[j], yj = ring[j + 1];
+      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
 /**
  * Composite class combines multiple vector tile sources into a single tile
  * Merges OSM, Seamap, Contours, Bathymetry and Soundings into one PBF
@@ -14,6 +29,22 @@ class Composite {
     this.contours = contours;
     this.bathymetry = bathymetry;
     this.soundings = soundings;
+  }
+
+  // The source-layers present in the composite: OSM base (Shortbread schema) plus the
+  // plugin's own seamap, contour, bathymetry and soundings layers. Used by the tilejson
+  // (`vector_layers`) so the vector-tile inspector page can enumerate them.
+  static VECTOR_LAYERS() {
+    return [
+      // OSM / Shortbread base
+      'water_polygons', 'water_lines', 'water', 'land', 'sites', 'buildings',
+      'streets', 'street_polygons', 'street_labels', 'bridges', 'ferries',
+      'pier_polygons', 'pier_lines', 'dam_polygons', 'dam_lines',
+      'boundaries', 'boundary_labels', 'place_labels', 'pois', 'addresses',
+      'public_transport', 'aerialways',
+      // Plugin-generated / seamap
+      'seamark', 'light', 'contours', 'depth_areas', 'depth_contours', 'soundings'
+    ];
   }
 
   /**
@@ -39,7 +70,7 @@ class Composite {
 
     for (const tile of tiles) {
       if (!tile?.data) continue;
-      const vt = new VectorTile(new Pbf(tile.data));
+      const vt = new VectorTile(new Pbf(new Uint8Array(tile.data)));
 
       for (const layerName in vt.layers) {
         const layer = vt.layers[layerName];
@@ -60,6 +91,17 @@ class Composite {
           });
         }
       }
+    }
+
+    // The bathymetry DEMs are coarse (GEBCO ~450m) and report water below islands and
+    // towns. Drop soundings on the coastline land polygons (seamap `land` without `kind`,
+    // the same polygons the styles draw as land).
+    if (mergedLayers.soundings && mergedLayers.land) {
+      const land = mergedLayers.land.filter(f => f.type === 3 && f.properties.kind === undefined);
+      mergedLayers.soundings = mergedLayers.soundings.filter(f => {
+        const [px, py] = f.geometry[0];
+        return !land.some(l => pointInRings(px, py, l.geometry));
+      });
     }
 
     if (Object.keys(mergedLayers).length === 0) return null;
@@ -85,7 +127,8 @@ class Composite {
     }
 
     res.set('Content-Type', 'application/json');
-    res.set('Cache-Control', 'public, max-age=3600');
+    // Short-lived: it carries the tile URL version that busts cached tiles.
+    res.set('Cache-Control', 'public, max-age=60');
     res.json({
       tilejson: '3.0.0',
       name: `${provider}-composite`,
@@ -93,12 +136,16 @@ class Composite {
       version: '1.0.0',
       attribution: ['© OpenStreetMap contributors', source.attribution || ''].filter(a => a).join(', '),
       scheme: 'xyz',
-      tiles: [`${req.query.base_url || ''}/plugins/signalk-seamap-plugin/composite/${provider}/{z}/{x}/{y}.pbf`],
+      // The version busts browser caches when the baked-in soundings change.
+      tiles: [`${req.query.base_url || ''}/plugins/signalk-seamap-plugin/composite/${provider}/{z}/{x}/{y}.pbf?v=${encodeURIComponent(this.soundings.cacheName(provider))}`],
       minzoom: 0,
       maxzoom: 14,
       bounds: [-180, -85, 180, 85],
       center: [0, 0, 1],
-      format: 'pbf'
+      format: 'pbf',
+      // Source-layers the composite merges together (OSM/Shortbread + seamap + generated).
+      // Declared so tooling (the vector-tile inspector page) can enumerate the layers.
+      vector_layers: Composite.VECTOR_LAYERS().map(id => ({ id, fields: {} }))
     });
   }
 
@@ -118,8 +165,9 @@ class Composite {
       return res.status(404).send('Provider not found');
     }
 
-    // Check cache first
-    let cachedTile = this.tiles.getCachedTile('composite', provider, zNum, xNum, yNum);
+    // Check cache first (namespaced by the soundings settings, which are baked in)
+    const cacheName = this.soundings.cacheName(provider);
+    let cachedTile = this.tiles.getCachedTile('composite', cacheName, zNum, xNum, yNum);
 
     // Check if any source tiles are newer than cached composite
     const [osmSource, seamapSource, contourSource, bathymetrySource, soundingsSource] = await Promise.all([
@@ -150,7 +198,7 @@ class Composite {
       }
 
       // Save to cache
-      this.tiles.saveTileToCache('composite', provider, zNum, xNum, yNum, tileData);
+      this.tiles.saveTileToCache('composite', cacheName, zNum, xNum, yNum, tileData);
     } else {
       tileData = cachedTile.data();
     }

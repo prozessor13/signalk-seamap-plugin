@@ -34,6 +34,23 @@
         .home-link:hover {
             background: #f8f8f8;
         }
+        .inspect-link {
+            position: absolute;
+            top: 52px;
+            left: 10px;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            text-decoration: none;
+            color: #2c6e9b;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        .inspect-link:hover {
+            background: #f8f8f8;
+        }
 
         /* Style Switcher */
         .style-switcher {
@@ -236,9 +253,12 @@
 </head>
 <body>
     <a href="./" class="home-link">← Back to Downloader</a>
+    <a href="./inspector.html" id="inspect-link" class="inspect-link">🔍 Tile Inspector</a>
     <div class="style-switcher">
         <button id="style-seamap" class="active">Seamap</button>
         <button id="style-slim">Slim</button>
+        <button id="style-seamap-ol">Seamap OL</button>
+        <button id="style-seamap-ol-slim">Slim OL</button>
     </div>
     <div class="bathy-switcher">
         <button id="bathy-gebco" class="">GEBCO</button>
@@ -302,6 +322,9 @@
 
         // Bathymetry switcher - highlight active button
         document.getElementById(`bathy-${bathymetry === 'emod' ? 'emod' : 'gebco'}`).classList.add('active');
+
+        // Carry the current bathymetry provider over to the tile inspector.
+        document.getElementById('inspect-link').href = `./inspector.html?bathymetry=${encodeURIComponent(bathymetry)}`;
 
         document.getElementById('bathy-gebco').addEventListener('click', () => switchBathymetry('gebco'));
         document.getElementById('bathy-emod').addEventListener('click', () => switchBathymetry('emod'));
@@ -514,6 +537,14 @@
 
             document.getElementById('style-slim').addEventListener('click', () => {
                 switchStyle('slim');
+            });
+
+            document.getElementById('style-seamap-ol').addEventListener('click', () => {
+                switchStyle('seamap-ol');
+            });
+
+            document.getElementById('style-seamap-ol-slim').addEventListener('click', () => {
+                switchStyle('seamap-ol-slim');
             });
         }
 
